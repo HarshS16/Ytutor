@@ -10,22 +10,21 @@ import logging
 import os
 import sys
 import time
+import traceback
 from collections import defaultdict
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
+load_dotenv()
+
+# Initialize structured logging BEFORE anything else
+from api.logging_config import setup_logging
+setup_logging()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-load_dotenv()
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
 logger = logging.getLogger(__name__)
 
 # ── Configuration ──────────────────────────────────────────────────
@@ -57,19 +56,31 @@ rate_limit_store: dict[str, list[float]] = defaultdict(list)
 
 
 @app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    """Token-bucket rate limiter per IP address."""
-    if request.method == "POST":
-        client_ip = request.client.host if request.client else "unknown"
+async def request_logging_middleware(request: Request, call_next):
+    """
+    Logs every incoming request and its response with timing.
+    Also handles rate limiting for POST requests.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    method = request.method
+    path = request.url.path
+    query = str(request.url.query) if request.url.query else ""
+    request_id = f"{client_ip}-{time.time_ns()}"
+
+    logger.info(
+        f">> {method} {path}{'?' + query if query else ''} "
+        f"[client={client_ip}] [req_id={request_id}]"
+    )
+
+    # ── Rate limit check for POST ──────────────────────────────
+    if method == "POST":
         now = time.time()
         window = 60
-
         rate_limit_store[client_ip] = [
             t for t in rate_limit_store[client_ip] if now - t < window
         ]
-
         if len(rate_limit_store[client_ip]) >= MAX_REQUESTS_PER_MINUTE:
-            logger.warning(f"Rate limit exceeded for {client_ip}")
+            logger.warning(f"[!] Rate limit exceeded for {client_ip} on {path}")
             return JSONResponse(
                 status_code=429,
                 content={
@@ -77,11 +88,58 @@ async def rate_limit_middleware(request: Request, call_next):
                     "detail": f"Maximum {MAX_REQUESTS_PER_MINUTE} requests per minute.",
                 },
             )
-
         rate_limit_store[client_ip].append(now)
 
-    response = await call_next(request)
+    # ── Execute request and log result ─────────────────────────
+    start = time.time()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        elapsed = round(time.time() - start, 3)
+        logger.error(
+            f"[X] {method} {path} -- UNHANDLED EXCEPTION after {elapsed}s "
+            f"[req_id={request_id}]\n{traceback.format_exc()}"
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal server error", "detail": str(exc)},
+        )
+
+    elapsed = round(time.time() - start, 3)
+    status = response.status_code
+    level = logging.WARNING if status >= 400 else logging.INFO
+    symbol = "[OK]" if status < 400 else "[FAIL]"
+
+    logger.log(
+        level,
+        f"<< {symbol} {method} {path} -- {status} in {elapsed}s "
+        f"[req_id={request_id}]",
+    )
+
     return response
+
+
+# ── Global exception handler ──────────────────────────────────────
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all for any unhandled exceptions.
+    Logs full traceback so errors are NEVER silent.
+    """
+    logger.error(
+        f"[!!] Unhandled exception on {request.method} {request.url.path}:\n"
+        f"  Type: {type(exc).__name__}\n"
+        f"  Message: {exc}\n"
+        f"  Traceback:\n{traceback.format_exc()}"
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": str(exc),
+            "type": type(exc).__name__,
+        },
+    )
 
 
 # ── Import and include routers ─────────────────────────────────────

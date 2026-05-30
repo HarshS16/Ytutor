@@ -70,8 +70,8 @@ async def chat(request: ChatRequest):
                 user_message=prompt_data["user_message"],
             )
         except Exception as e:
-            logger.error(f"Groq error: {e}")
-            raise HTTPException(status_code=502, detail="Error generating response")
+            logger.error(f"Groq error (conversational): {type(e).__name__}: {e}", exc_info=True)
+            raise HTTPException(status_code=502, detail=f"Error generating response: {str(e)}")
 
         elapsed = round(time.time() - start_time, 2)
         logger.info(f"Response time: {elapsed}s (conversational)")
@@ -83,8 +83,8 @@ async def chat(request: ChatRequest):
     try:
         chunks = retrieve(request.playlist_id, user_message)
     except Exception as e:
-        logger.error(f"Retrieval error: {e}")
-        raise HTTPException(status_code=500, detail="Error searching the knowledge base")
+        logger.error(f"Retrieval error for playlist {request.playlist_id}: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error searching the knowledge base: {str(e)}")
 
     # ── Step 3: Handle no-context case ─────────────────────────────
     if not chunks:
@@ -116,8 +116,8 @@ async def chat(request: ChatRequest):
             user_message=prompt_data["user_message"],
         )
     except Exception as e:
-        logger.error(f"Groq error: {e}")
-        raise HTTPException(status_code=502, detail="Error generating response")
+        logger.error(f"Groq error (RAG): {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail=f"Error generating response: {str(e)}")
 
     if "error" in result:
         return ChatResponse(answer=result["error"], sources=[], found_context=True)

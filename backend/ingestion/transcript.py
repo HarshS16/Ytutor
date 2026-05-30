@@ -6,13 +6,26 @@ Fetches subtitles via youtube-transcript-api, then cleans them:
 - Merges broken sentence fragments
 - Removes filler words
 - Preserves timestamp mapping
+
+Rate-limit handling:
+- Exponential backoff with jitter on HTTP 429
+- Early-exit on rate-limit in yt-dlp fallback
+- Max 3 language attempts in fallback
 """
 
 import logging
+import random
 import re
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# ── Rate-limit configuration ──────────────────────────────────────
+MAX_RETRIES = 3                # Number of retries on 429
+INITIAL_BACKOFF_SECONDS = 5    # First retry waits 5s
+MAX_BACKOFF_SECONDS = 60       # Cap backoff at 60s
+MAX_FALLBACK_LANGUAGES = 3    # Max languages to try in yt-dlp fallback
 
 # Filler words/phrases to remove
 FILLER_PATTERNS = [
@@ -27,11 +40,95 @@ MARKER_PATTERN = re.compile(
 )
 
 
+def _is_rate_limited(exc: Exception) -> bool:
+    """Check if an exception is a 429 rate-limit error."""
+    err_str = str(exc)
+    return "429" in err_str or "Too Many Requests" in err_str
+
+
+def _backoff_sleep(attempt: int) -> None:
+    """Sleep with exponential backoff + jitter."""
+    base = min(INITIAL_BACKOFF_SECONDS * (2 ** attempt), MAX_BACKOFF_SECONDS)
+    jitter = random.uniform(0, base * 0.5)
+    wait = base + jitter
+    logger.info(f"Rate-limited — backing off {wait:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+    time.sleep(wait)
+
+
+def fetch_transcript_ytdlp(video_id: str) -> Optional[list[dict]]:
+    import yt_dlp
+    import requests
+    
+    ydl_opts = {'quiet': True, 'skip_download': True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+        except Exception as e:
+            logger.warning(f"yt-dlp extract_info failed for {video_id}: {type(e).__name__}: {e}", exc_info=True)
+            return None
+            
+    caps = info.get('subtitles', {})
+    if not caps:
+        caps = info.get('automatic_captions', {})
+        
+    if not caps:
+        return None
+        
+    # Try preferred languages first, then any available — but cap at MAX_FALLBACK_LANGUAGES
+    langs_to_try = []
+    for l in ['en', 'hi'] + list(caps.keys()):
+        if l in caps and l not in langs_to_try:
+            langs_to_try.append(l)
+            if len(langs_to_try) >= MAX_FALLBACK_LANGUAGES:
+                break
+            
+    for lang in langs_to_try:
+        url = next((c['url'] for c in caps[lang] if c.get('ext') == 'json3'), None)
+        if not url:
+            continue
+            
+        try:
+            resp = requests.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+            segments = []
+            for ev in data.get('events', []):
+                if 'segs' not in ev:
+                    continue
+                text = "".join(s.get('utf8', '') for s in ev['segs']).strip()
+                if not text:
+                    continue
+                segments.append({
+                    'text': text,
+                    'start': ev['tStartMs'] / 1000.0,
+                    'duration': ev.get('dDurationMs', 0) / 1000.0
+                })
+            
+            if segments:
+                return segments
+        except Exception as e:
+            if _is_rate_limited(e):
+                # Stop trying more languages — all will fail with 429
+                logger.warning(
+                    f"yt-dlp fallback rate-limited for {video_id} (lang={lang}). "
+                    f"Stopping further language attempts."
+                )
+                return None
+            logger.warning(f"yt-dlp fallback request for {lang} failed: {type(e).__name__}: {e}", exc_info=True)
+            continue
+            
+    return None
+
 def fetch_transcript(video_id: str, languages: list[str] = None) -> Optional[list[dict]]:
     """
-    Fetch transcript for a YouTube video.
+    Fetch transcript for a YouTube video with retry + backoff on rate limits.
 
     Tries manual captions first, then auto-generated.
+    Falls back to any available language and translates if necessary.
+    Uses yt-dlp as a bulletproof fallback if youtube-transcript-api is blocked.
+
+    On HTTP 429 (Too Many Requests), retries up to MAX_RETRIES times with
+    exponential backoff before falling back to yt-dlp.
 
     Args:
         video_id: YouTube video ID (e.g., "dQw4w9WgXcQ")
@@ -46,15 +143,68 @@ def fetch_transcript(video_id: str, languages: list[str] = None) -> Optional[lis
     if languages is None:
         languages = ["en"]
 
-    try:
-        # Try fetching transcript — the library auto-handles manual vs auto-generated
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
-        logger.info(f"Fetched transcript for {video_id}: {len(transcript)} segments")
-        return transcript
+    last_exception = None
 
-    except Exception as e:
-        logger.warning(f"No transcript for {video_id}: {e}")
-        return None
+    for attempt in range(MAX_RETRIES):
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            try:
+                t = transcript_list.find_transcript(languages)
+            except Exception:
+                t = next(iter(transcript_list))
+                if languages and t.is_translatable:
+                    try:
+                        translated_t = t.translate(languages[0])
+                        transcript = translated_t.fetch()
+                        logger.info(f"Fetched translated transcript for {video_id} to {languages[0]}: {len(transcript)} segments")
+                        return transcript
+                    except Exception as trans_e:
+                        if _is_rate_limited(trans_e):
+                            last_exception = trans_e
+                            _backoff_sleep(attempt)
+                            continue
+                        logger.warning(
+                            f"Could not translate transcript for {video_id}: "
+                            f"{type(trans_e).__name__}: {trans_e}",
+                            exc_info=True,
+                        )
+                        
+            transcript = t.fetch()
+            logger.info(f"Fetched transcript for {video_id} (language: {t.language_code}): {len(transcript)} segments")
+            return transcript
+
+        except Exception as e:
+            last_exception = e
+            if _is_rate_limited(e):
+                if attempt < MAX_RETRIES - 1:
+                    _backoff_sleep(attempt)
+                    continue
+                else:
+                    logger.warning(
+                        f"youtube-transcript-api rate-limited for {video_id} after "
+                        f"{MAX_RETRIES} attempts. Falling back to yt-dlp..."
+                    )
+            else:
+                logger.warning(
+                    f"youtube-transcript-api failed for {video_id}: {type(e).__name__}: {e}. "
+                    f"Falling back to yt-dlp...",
+                    exc_info=True,
+                )
+                break  # Non-rate-limit errors go straight to fallback
+
+    # yt-dlp fallback
+    fallback = fetch_transcript_ytdlp(video_id)
+    if fallback:
+        logger.info(f"Successfully fetched transcript for {video_id} using yt-dlp: {len(fallback)} segments")
+        return fallback
+
+    if last_exception and _is_rate_limited(last_exception):
+        logger.error(
+            f"All transcript methods rate-limited for {video_id}. "
+            f"YouTube is throttling requests from this IP."
+        )
+    return None
 
 
 def clean_transcript_text(text: str) -> str:

@@ -8,6 +8,10 @@ Coordinates the complete playlist processing flow:
 4. Generate embeddings
 5. Store in ChromaDB
 6. Update database records
+
+Rate-limit handling:
+- Configurable inter-video delay to avoid hammering YouTube
+- Circuit breaker: pauses for a cooldown after consecutive 429 failures
 """
 
 import asyncio
@@ -25,12 +29,19 @@ from ingestion.vector_store import upsert_chunks, clear_collection
 
 logger = logging.getLogger(__name__)
 
+# ── Rate-limit configuration ──────────────────────────────────────
+INTER_VIDEO_DELAY_SECONDS = 2      # Delay between each video's transcript fetch
+RATE_LIMIT_COOLDOWN_SECONDS = 60   # Cooldown after consecutive rate-limit hits
+CONSECUTIVE_FAIL_THRESHOLD = 3     # Number of consecutive failures before cooldown
+
 
 async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
     """
     Run the full ingestion pipeline for a playlist.
 
     Updates playlist and video statuses as processing progresses.
+    Includes rate-limit protection: delays between videos and a circuit
+    breaker that triggers a 60s cooldown after 3 consecutive failures.
 
     Args:
         db: Database session
@@ -42,7 +53,9 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
     """
     start_time = time.time()
 
-    logger.info(f"Starting ingestion for playlist {playlist_id}")
+    logger.info(f"{'='*60}")
+    logger.info(f"INGESTION PIPELINE START -- playlist_id={playlist_id}")
+    logger.info(f"{'='*60}")
     await crud.update_playlist_status(db, playlist_id, "processing")
 
     stats = {
@@ -52,6 +65,8 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
         "elapsed_seconds": 0,
         "errors": [],
     }
+
+    consecutive_failures = 0  # Track consecutive transcript-fetch failures
 
     try:
         # Get all videos for this playlist
@@ -65,10 +80,24 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
         await asyncio.to_thread(clear_collection, playlist_id)
 
         # Process each video
-        for video in videos:
+        for i, video in enumerate(videos):
             try:
                 logger.info(f"Processing video {video.position + 1}/{len(videos)}: {video.title}")
                 await crud.update_video(db, video.id, status="processing")
+
+                # ── Rate-limit: inter-video delay ──────────────────────
+                if i > 0:
+                    logger.debug(f"Waiting {INTER_VIDEO_DELAY_SECONDS}s before next transcript fetch...")
+                    await asyncio.sleep(INTER_VIDEO_DELAY_SECONDS)
+
+                # ── Rate-limit: circuit breaker cooldown ───────────────
+                if consecutive_failures >= CONSECUTIVE_FAIL_THRESHOLD:
+                    logger.warning(
+                        f"Circuit breaker: {consecutive_failures} consecutive failures. "
+                        f"Cooling down for {RATE_LIMIT_COOLDOWN_SECONDS}s..."
+                    )
+                    await asyncio.sleep(RATE_LIMIT_COOLDOWN_SECONDS)
+                    consecutive_failures = 0  # Reset after cooldown
 
                 # Step 1: Fetch transcript
                 raw_transcript = await asyncio.to_thread(
@@ -76,7 +105,11 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                 )
 
                 if not raw_transcript:
-                    logger.warning(f"No transcript for video {video.video_id}")
+                    consecutive_failures += 1
+                    logger.warning(
+                        f"  [!] No transcript available for video {video.video_id} "
+                        f"('{video.title}') [consecutive failures: {consecutive_failures}]"
+                    )
                     await crud.update_video(
                         db, video.id,
                         status="no_transcript",
@@ -86,10 +119,15 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                     stats["errors"].append(f"No transcript: {video.title}")
                     continue
 
+                # Success — reset consecutive failure counter
+                consecutive_failures = 0
+                logger.info(f"  [OK] Transcript fetched: {len(raw_transcript)} segments")
+
                 # Step 2: Process transcript (clean + merge)
                 processed = process_transcript(raw_transcript)
 
                 if not processed["full_text"]:
+                    logger.warning(f"  [!] Transcript processing produced empty result for {video.video_id}")
                     await crud.update_video(
                         db, video.id,
                         status="error",
@@ -97,6 +135,11 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                     )
                     stats["videos_failed"] += 1
                     continue
+
+                logger.info(
+                    f"  [OK] Transcript processed: {len(processed['full_text'])} chars, "
+                    f"{len(processed['segments'])} merged segments"
+                )
 
                 # Save cleaned transcript to DB
                 await crud.update_video(
@@ -112,9 +155,12 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                 )
 
                 if not chunks_with_ts:
+                    logger.info(f"  [OK] No chunks produced (short transcript), marking ready")
                     await crud.update_video(db, video.id, status="ready")
                     stats["videos_processed"] += 1
                     continue
+
+                logger.info(f"  [OK] Chunked into {len(chunks_with_ts)} chunks")
 
                 # Step 4: Generate embeddings
                 chunk_texts = [c["text"] for c in chunks_with_ts]
@@ -170,7 +216,11 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                 )
 
             except Exception as e:
-                logger.error(f"Error processing video {video.video_id}: {e}")
+                logger.error(
+                    f"  [FAIL] Error processing video {video.video_id} ('{video.title}'): "
+                    f"{type(e).__name__}: {e}",
+                    exc_info=True,
+                )
                 await crud.update_video(
                     db, video.id,
                     status="error",
@@ -189,16 +239,24 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
             )
 
     except Exception as e:
-        logger.error(f"Pipeline error for playlist {playlist_id}: {e}")
+        logger.error(
+            f"Pipeline CRITICAL error for playlist {playlist_id}: "
+            f"{type(e).__name__}: {e}",
+            exc_info=True,
+        )
         await crud.update_playlist_status(db, playlist_id, "error", str(e))
         stats["errors"].append(str(e))
 
     stats["elapsed_seconds"] = round(time.time() - start_time, 2)
 
+    logger.info(f"{'='*60}")
     logger.info(
-        f"Ingestion complete for playlist {playlist_id}: "
+        f"INGESTION PIPELINE COMPLETE -- playlist {playlist_id}: "
         f"{stats['videos_processed']} processed, {stats['videos_failed']} failed, "
         f"{stats['total_chunks']} chunks, {stats['elapsed_seconds']}s"
     )
+    if stats["errors"]:
+        logger.warning(f"  Errors encountered: {stats['errors']}")
+    logger.info(f"{'='*60}")
 
     return stats

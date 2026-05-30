@@ -105,6 +105,7 @@ def build_notes_prompt(transcript: str, video_title: str, note_type: str = "deta
 {instruction}
 
 ## Formatting Rules:
+- ALWAYS write notes in English, even if the transcript is in another language
 - Use markdown formatting (# headers, ## sub-headers, - bullet points)
 - Bold **key terms** and important concepts
 - Use numbered lists for sequential processes/steps
@@ -132,6 +133,7 @@ def build_flashcards_prompt(transcript: str, video_title: str, count: int = 10) 
 - Answers should be concise but complete
 - Tag each with difficulty: "easy", "medium", or "hard"
 - Tag each with a topic/category
+- ALWAYS write in English, even if the transcript is in another language
 
 ## Output Format (STRICT JSON):
 Return a JSON array of objects with this exact structure:
@@ -165,6 +167,7 @@ def build_quiz_prompt(transcript: str, video_title: str, count: int = 10) -> dic
 - MCQ questions should have exactly 4 options (A, B, C, D)
 - Questions should test understanding, not just recall
 - Include explanations for correct answers
+- ALWAYS write in English, even if the transcript is in another language
 
 ## Output Format (STRICT JSON):
 Return a JSON array of objects with this exact structure:

@@ -32,11 +32,17 @@ router = APIRouter(prefix="/api", tags=["playlist"])
 async def _background_ingest(playlist_id: int):
     """Run ingestion in the background with its own DB session."""
     from db.database import async_session
+    logger.info(f"[>>] Background ingestion STARTING for playlist {playlist_id}")
     async with async_session() as db:
         try:
             await run_ingestion(db, playlist_id)
+            logger.info(f"[OK] Background ingestion COMPLETED for playlist {playlist_id}")
         except Exception as e:
-            logger.error(f"Background ingestion failed: {e}")
+            logger.error(
+                f"[FAIL] Background ingestion FAILED for playlist {playlist_id}: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
             await crud.update_playlist_status(db, playlist_id, "error", str(e))
 
 
@@ -54,14 +60,20 @@ async def import_playlist(
     3. Creates DB records
     4. Kicks off background processing (transcript extraction + embedding)
     """
+    logger.info(f"[>>] Playlist import request: {request.playlist_url}")
+
     # Validate URL
     playlist_id_yt = extract_playlist_id(request.playlist_url)
     if not playlist_id_yt:
+        logger.warning(f"Invalid playlist URL rejected: {request.playlist_url}")
         raise HTTPException(status_code=400, detail="Invalid YouTube playlist URL")
+
+    logger.debug(f"Extracted YouTube playlist ID: {playlist_id_yt}")
 
     # Check if already imported
     existing = await crud.get_playlist_by_youtube_id(db, playlist_id_yt)
     if existing:
+        logger.info(f"Playlist already exists (id={existing.id}), returning existing")
         return PlaylistResponse(
             id=existing.id,
             playlist_url=existing.playlist_url,
@@ -78,12 +90,18 @@ async def import_playlist(
 
     # Fetch metadata from YouTube
     try:
+        logger.info(f"Fetching metadata from YouTube for playlist {playlist_id_yt}...")
         metadata = await asyncio.to_thread(fetch_playlist_metadata, request.playlist_url)
+        logger.info(f"[OK] Metadata fetched: '{metadata.get('title')}' with {len(metadata.get('videos', []))} videos")
     except ValueError as e:
+        logger.warning(f"ValueError fetching playlist: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Failed to fetch playlist: {e}")
-        raise HTTPException(status_code=502, detail="Failed to fetch playlist from YouTube")
+        logger.error(
+            f"Failed to fetch playlist from YouTube: {type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=502, detail=f"Failed to fetch playlist from YouTube: {str(e)}")
 
     # Create playlist record
     playlist = await crud.create_playlist(
@@ -237,8 +255,9 @@ async def delete_playlist(playlist_id: int, db: AsyncSession = Depends(get_db)):
     try:
         from ingestion.vector_store import clear_collection
         clear_collection(playlist_id)
+        logger.info(f"Vector store cleared for playlist {playlist_id}")
     except Exception as e:
-        logger.warning(f"Error clearing vector store: {e}")
+        logger.warning(f"Error clearing vector store for playlist {playlist_id}: {e}", exc_info=True)
 
     await crud.delete_playlist(db, playlist_id)
     return {"status": "deleted", "playlist_id": playlist_id}
