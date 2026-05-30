@@ -261,3 +261,68 @@ async def delete_playlist(playlist_id: int, db: AsyncSession = Depends(get_db)):
 
     await crud.delete_playlist(db, playlist_id)
     return {"status": "deleted", "playlist_id": playlist_id}
+
+
+@router.post("/playlist/{playlist_id}/retry")
+async def retry_failed_videos(
+    playlist_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retry ingestion for videos that failed or had no transcript.
+
+    Only re-processes videos with status 'error' or 'no_transcript',
+    skipping videos that are already 'ready'. Useful after rate-limit
+    recovery without needing to delete and re-import the playlist.
+    """
+    playlist = await crud.get_playlist(db, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    if playlist.status == "processing":
+        raise HTTPException(status_code=409, detail="Playlist is already being processed")
+
+    # Count retryable videos
+    videos = await crud.get_playlist_videos(db, playlist_id)
+    retryable = [v for v in videos if v.status in ("error", "no_transcript", "pending")]
+
+    if not retryable:
+        raise HTTPException(status_code=400, detail="No failed videos to retry")
+
+    # Update playlist status
+    await crud.update_playlist_status(db, playlist_id, "processing")
+
+    # Start background retry
+    background_tasks.add_task(_background_retry, playlist_id)
+
+    logger.info(
+        f"Retry requested for playlist {playlist_id}: "
+        f"{len(retryable)}/{len(videos)} videos to re-process"
+    )
+
+    return {
+        "status": "retrying",
+        "playlist_id": playlist_id,
+        "videos_to_retry": len(retryable),
+        "videos_already_ready": len(videos) - len(retryable),
+    }
+
+
+async def _background_retry(playlist_id: int):
+    """Run retry ingestion in the background for failed videos only."""
+    from db.database import async_session
+    logger.info(f"[>>] Background RETRY starting for playlist {playlist_id}")
+    async with async_session() as db:
+        try:
+            from ingestion.pipeline import run_ingestion_retry
+            await run_ingestion_retry(db, playlist_id)
+            logger.info(f"[OK] Background RETRY completed for playlist {playlist_id}")
+        except Exception as e:
+            logger.error(
+                f"[FAIL] Background RETRY failed for playlist {playlist_id}: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            await crud.update_playlist_status(db, playlist_id, "error", str(e))
+
