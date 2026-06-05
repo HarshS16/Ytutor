@@ -10,12 +10,15 @@ Key rotation strategy:
 - On rate limit or API error, the failing key is temporarily cooled down
 - The next available key is tried automatically
 - If ALL keys are exhausted, returns a user-friendly error
+
+Supports both blocking and streaming completions.
 """
 
 import logging
 import os
 import time
 import threading
+from typing import Generator
 
 from dotenv import load_dotenv
 from groq import Groq, RateLimitError, APIError, APIConnectionError
@@ -26,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # ── Configuration ──────────────────────────────────────────────────
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL_LIGHT = os.getenv("GROQ_MODEL_LIGHT", "llama-3.1-8b-instant")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", 2000))
 TEMPERATURE = float(os.getenv("TEMPERATURE", 0.2))
 
@@ -156,7 +160,12 @@ def get_key_pool_status() -> dict:
     return _key_pool.status()
 
 
-def get_completion(system_prompt: str, user_message: str, max_tokens: int = None) -> dict:
+def get_completion(
+    system_prompt: str,
+    user_message: str,
+    max_tokens: int = None,
+    model: str = None,
+) -> dict:
     """
     Get a chat completion from Groq with automatic key failover.
 
@@ -167,12 +176,14 @@ def get_completion(system_prompt: str, user_message: str, max_tokens: int = None
         system_prompt: System prompt with context
         user_message: User's question
         max_tokens: Override default max tokens
+        model: Override default model (e.g. GROQ_MODEL_LIGHT for simple tasks)
 
     Returns:
         Dict with 'content' (str) and 'usage' (dict) keys.
         On error, returns dict with 'error' (str) key.
     """
     tokens = max_tokens or MAX_TOKENS
+    use_model = model or GROQ_MODEL
     last_error = None
 
     # Try up to total_keys times (one attempt per key)
@@ -181,12 +192,12 @@ def get_completion(system_prompt: str, user_message: str, max_tokens: int = None
             client, key_idx = _key_pool.get_next_client()
 
             logger.info(
-                f"Calling Groq ({GROQ_MODEL}) with key #{key_idx + 1} — "
+                f"Calling Groq ({use_model}) with key #{key_idx + 1} — "
                 f"temp={TEMPERATURE}, max_tokens={tokens}"
             )
 
             response = client.chat.completions.create(
-                model=GROQ_MODEL,
+                model=use_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
@@ -255,3 +266,85 @@ def get_completion(system_prompt: str, user_message: str, max_tokens: int = None
             "Please wait a minute and try again."
         )
     }
+
+
+def get_completion_stream(
+    system_prompt: str,
+    user_message: str,
+    max_tokens: int = None,
+    model: str = None,
+) -> Generator[str, None, None]:
+    """
+    Stream a chat completion from Groq token-by-token with key failover.
+
+    Yields content tokens as they arrive. On rate limit, tries the next key.
+
+    Args:
+        system_prompt: System prompt with context
+        user_message: User's question
+        max_tokens: Override default max tokens
+        model: Override default model
+
+    Yields:
+        Content token strings as they're generated
+
+    Raises:
+        ValueError: If all keys fail or are exhausted
+    """
+    tokens = max_tokens or MAX_TOKENS
+    use_model = model or GROQ_MODEL
+    last_error = None
+
+    for attempt in range(_key_pool.total_keys):
+        try:
+            client, key_idx = _key_pool.get_next_client()
+
+            logger.info(
+                f"Streaming Groq ({use_model}) with key #{key_idx + 1} — "
+                f"temp={TEMPERATURE}, max_tokens={tokens}"
+            )
+
+            stream = client.chat.completions.create(
+                model=use_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=tokens,
+                temperature=TEMPERATURE,
+                stream=True,
+            )
+
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+
+            logger.info(f"Stream completed (key #{key_idx + 1})")
+            return  # Successfully streamed
+
+        except RateLimitError as e:
+            logger.warning(f"Groq rate limit on key #{key_idx + 1} during stream: {e}")
+            _key_pool.mark_failed(key_idx)
+            last_error = e
+            continue
+
+        except APIConnectionError as e:
+            logger.error(f"Groq connection error during stream: {e}")
+            raise
+
+        except APIError as e:
+            logger.error(f"Groq API error on key #{key_idx + 1} during stream: {e}")
+            if hasattr(e, 'status_code') and e.status_code and e.status_code >= 500:
+                _key_pool.mark_failed(key_idx)
+                last_error = e
+                continue
+            raise
+
+        except ValueError as e:
+            logger.error(f"Key pool exhausted: {e}")
+            raise
+
+    raise ValueError(
+        f"All {_key_pool.total_keys} Groq keys failed during streaming. "
+        f"Last error: {last_error}"
+    )

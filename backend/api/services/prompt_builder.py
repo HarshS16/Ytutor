@@ -7,6 +7,8 @@ Constructs system prompts for different use cases:
 - Notes generation
 - Flashcard generation
 - Quiz generation
+
+Optimized for minimal token usage without sacrificing output quality.
 """
 
 import logging
@@ -14,6 +16,26 @@ import logging
 from ingestion.transcript import format_timestamp
 
 logger = logging.getLogger(__name__)
+
+# ── Maximum transcript chars sent to generators ────────────────────
+MAX_TRANSCRIPT_CHARS = 6000
+
+
+def _smart_truncate(text: str, max_chars: int = MAX_TRANSCRIPT_CHARS) -> str:
+    """
+    Truncate transcript at a sentence boundary to avoid mid-thought cuts.
+
+    Finds the last '. ' within the allowed window so the LLM always
+    receives complete sentences.
+    """
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    # Find last sentence boundary
+    last_period = truncated.rfind('. ')
+    if last_period > max_chars * 0.7:
+        return truncated[:last_period + 1]
+    return truncated
 
 
 def build_chat_prompt(chunks: list[dict], user_message: str) -> dict:
@@ -35,25 +57,17 @@ def build_chat_prompt(chunks: list[dict], user_message: str) -> dict:
         video_title = chunk.get("video_title", "Unknown Video")
 
         context_parts.append(
-            f"[Source {i}] Video: \"{video_title}\" ({ts_start} – {ts_end})\n"
+            f"[{i}] \"{video_title}\" ({ts_start}–{ts_end})\n"
             f"{chunk['text']}"
         )
 
     context_block = "\n\n---\n\n".join(context_parts)
 
-    system_prompt = f"""You are Ytutor AI, an expert learning assistant that helps students understand content from YouTube educational playlists.
+    system_prompt = f"""You are Ytutor AI, a tutor for YouTube playlist content.
+Answer ONLY from the context below. Cite video titles and timestamps (e.g. "In 'Video Title' at 5:30…").
+Explain clearly with examples. Use markdown formatting. If the context is insufficient, say so. Never invent facts.
 
-You have access to transcript excerpts from the playlist videos. Use ONLY the provided context to answer questions. If the context doesn't contain enough information, say so honestly.
-
-## Rules:
-1. Answer based ONLY on the provided transcript context
-2. Always cite the video title and timestamp when referencing specific content (e.g., "In 'Video Title' at 5:30...")
-3. Explain concepts clearly as a tutor would — use examples and analogies
-4. Use markdown formatting for readability (headers, bullet points, code blocks if applicable)
-5. If the question is ambiguous, address the most likely interpretation
-6. Never make up information not present in the context
-
-## Context from playlist transcripts:
+Context:
 
 {context_block}"""
 
@@ -64,17 +78,10 @@ You have access to transcript excerpts from the playlist videos. Use ONLY the pr
 
 
 def build_conversational_prompt(user_message: str) -> dict:
-    """Build a prompt for conversational/meta messages."""
-    system_prompt = """You are Ytutor AI, a friendly and helpful learning assistant for YouTube educational playlists.
-
-You help students learn from YouTube playlist content by:
-- Answering questions about video transcripts
-- Generating notes and summaries
-- Creating flashcards and quizzes
-- Providing explanations and study guidance
-
-Respond warmly and helpfully. If the user hasn't imported a playlist yet, suggest they paste a YouTube playlist URL to get started.
-Keep responses concise and encouraging."""
+    """Build a prompt for conversational/meta messages (uses lighter model)."""
+    system_prompt = """You are Ytutor AI, a friendly learning assistant for YouTube playlists.
+You help students learn via chat, notes, flashcards, and quizzes from playlist content.
+Be warm and concise. If no playlist is imported yet, suggest pasting a YouTube playlist URL."""
 
     return {
         "system_prompt": system_prompt,
@@ -118,7 +125,7 @@ def build_notes_prompt(transcript: str, video_title: str, note_type: str = "deta
 
     return {
         "system_prompt": system_prompt,
-        "user_message": f"Generate {note_type} notes from this transcript:\n\n{transcript[:8000]}",
+        "user_message": f"Generate {note_type} notes from this transcript:\n\n{_smart_truncate(transcript)}",
     }
 
 
@@ -153,7 +160,7 @@ Return ONLY the JSON array, no other text.
 
     return {
         "system_prompt": system_prompt,
-        "user_message": f"Generate {count} flashcards from this transcript:\n\n{transcript[:8000]}",
+        "user_message": f"Generate {count} flashcards from this transcript:\n\n{_smart_truncate(transcript)}",
     }
 
 
@@ -202,7 +209,7 @@ Return ONLY the JSON array, no other text.
 
     return {
         "system_prompt": system_prompt,
-        "user_message": f"Generate {count} quiz questions from this transcript:\n\n{transcript[:8000]}",
+        "user_message": f"Generate {count} quiz questions from this transcript:\n\n{_smart_truncate(transcript)}",
     }
 
 

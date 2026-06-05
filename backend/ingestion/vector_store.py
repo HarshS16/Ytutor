@@ -4,12 +4,14 @@ ChromaDB vector store interface for Ytutor AI.
 Each playlist gets its own ChromaDB collection (playlist_{id}).
 Supports ingestion (upsert) and retrieval (query) with video metadata.
 
-Adapted from WebBee-Chatbot's vector_store.
+Optimized with cached client and collection objects to avoid
+repeated disk reads on every query.
 """
 
 import hashlib
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 
 import chromadb
@@ -22,27 +24,66 @@ logger = logging.getLogger(__name__)
 # ── Configuration ──────────────────────────────────────────────────
 CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", os.path.join(os.path.dirname(__file__), "..", "chroma_db"))
 
+# ── Cached client and collections ──────────────────────────────────
+_client: chromadb.PersistentClient = None
+_client_lock = threading.Lock()
+_collection_cache: dict[str, object] = {}
+_collection_lock = threading.Lock()
+
 
 def get_client() -> chromadb.PersistentClient:
-    """Get a persistent ChromaDB client."""
-    abs_path = os.path.abspath(CHROMA_DB_PATH)
-    os.makedirs(abs_path, exist_ok=True)
-    logger.info(f"ChromaDB path: {abs_path}")
-    return chromadb.PersistentClient(path=abs_path)
+    """Get a persistent ChromaDB client (singleton, cached)."""
+    global _client
+    if _client is not None:
+        return _client
+
+    with _client_lock:
+        # Double-check after acquiring lock
+        if _client is not None:
+            return _client
+        abs_path = os.path.abspath(CHROMA_DB_PATH)
+        os.makedirs(abs_path, exist_ok=True)
+        logger.info(f"ChromaDB client initialized: {abs_path}")
+        _client = chromadb.PersistentClient(path=abs_path)
+        return _client
 
 
 def get_collection(playlist_id: int, client: chromadb.PersistentClient = None):
-    """Get or create a collection for a specific playlist."""
-    if client is None:
-        client = get_client()
+    """
+    Get or create a collection for a specific playlist.
 
+    Collections are cached in memory after first access, so repeated
+    queries to the same playlist avoid disk reads.
+    """
     collection_name = f"playlist_{playlist_id}"
-    collection = client.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"},
-    )
-    logger.info(f"Collection '{collection_name}' — {collection.count()} documents")
-    return collection
+
+    # Check cache first (fast path, no lock)
+    cached = _collection_cache.get(collection_name)
+    if cached is not None:
+        return cached
+
+    with _collection_lock:
+        # Double-check after acquiring lock
+        cached = _collection_cache.get(collection_name)
+        if cached is not None:
+            return cached
+
+        if client is None:
+            client = get_client()
+
+        collection = client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"},
+        )
+        logger.info(f"Collection '{collection_name}' loaded — {collection.count()} documents")
+        _collection_cache[collection_name] = collection
+        return collection
+
+
+def _invalidate_collection_cache(collection_name: str):
+    """Remove a collection from the cache (e.g. after clearing it)."""
+    with _collection_lock:
+        _collection_cache.pop(collection_name, None)
 
 
 def generate_chunk_id(video_id: str, chunk_index: int) -> str:
@@ -186,11 +227,16 @@ def clear_collection(playlist_id: int) -> None:
     """Clear all data for a playlist collection."""
     client = get_client()
     collection_name = f"playlist_{playlist_id}"
+
+    # Invalidate cache first
+    _invalidate_collection_cache(collection_name)
+
     try:
         client.delete_collection(collection_name)
         logger.info(f"Deleted collection '{collection_name}'")
     except Exception:
         logger.info(f"Collection '{collection_name}' doesn't exist")
 
-    get_collection(playlist_id, client)
+    # Re-create and cache
+    collection = get_collection(playlist_id, client)
     logger.info(f"Recreated empty collection '{collection_name}'")
