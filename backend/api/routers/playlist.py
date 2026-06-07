@@ -73,7 +73,31 @@ async def import_playlist(
     # Check if already imported
     existing = await crud.get_playlist_by_youtube_id(db, playlist_id_yt)
     if existing:
-        logger.info(f"Playlist already exists (id={existing.id}), returning existing")
+        # If the playlist is ready or actively processing, just return it
+        if existing.status in ("ready", "processing", "extracting"):
+            logger.info(f"Playlist already exists (id={existing.id}, status={existing.status}), returning existing")
+            return PlaylistResponse(
+                id=existing.id,
+                playlist_url=existing.playlist_url,
+                youtube_playlist_id=existing.youtube_playlist_id,
+                title=existing.title,
+                description=existing.description,
+                thumbnail=existing.thumbnail,
+                channel=existing.channel,
+                video_count=existing.video_count,
+                status=existing.status,
+                error_message=existing.error_message,
+                created_at=existing.created_at,
+            )
+
+        # If the playlist failed (error/pending), re-trigger ingestion
+        logger.info(
+            f"Playlist exists but in '{existing.status}' state (id={existing.id}). "
+            f"Re-triggering ingestion..."
+        )
+        await crud.update_playlist_status(db, existing.id, "processing")
+        background_tasks.add_task(_background_ingest, existing.id)
+
         return PlaylistResponse(
             id=existing.id,
             playlist_url=existing.playlist_url,
@@ -83,8 +107,8 @@ async def import_playlist(
             thumbnail=existing.thumbnail,
             channel=existing.channel,
             video_count=existing.video_count,
-            status=existing.status,
-            error_message=existing.error_message,
+            status="processing",
+            error_message=None,
             created_at=existing.created_at,
         )
 
@@ -214,7 +238,7 @@ async def get_playlist(playlist_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/playlist/{playlist_id}/status", response_model=ProcessingStatus)
 async def get_playlist_status(playlist_id: int, db: AsyncSession = Depends(get_db)):
-    """Get processing status for a playlist."""
+    """Get processing status for a playlist, with live progress if running."""
     playlist = await crud.get_playlist(db, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
@@ -233,6 +257,12 @@ async def get_playlist_status(playlist_id: int, db: AsyncSession = Depends(get_d
 
     progress = (processed / total * 100) if total > 0 else 0
 
+    # Merge live progress from the pipeline (if running)
+    from ingestion.pipeline import get_ingestion_progress
+    live = get_ingestion_progress(playlist_id)
+    current_video = live.get("current_video") if live else None
+    current_video_title = live.get("current_video_title") if live else None
+
     return ProcessingStatus(
         playlist_id=playlist_id,
         status=playlist.status,
@@ -241,6 +271,8 @@ async def get_playlist_status(playlist_id: int, db: AsyncSession = Depends(get_d
         videos_failed=failed,
         total_chunks=total_chunks,
         progress_percent=round(progress, 1),
+        current_video=current_video,
+        current_video_title=current_video_title,
     )
 
 

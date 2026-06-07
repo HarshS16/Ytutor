@@ -1,31 +1,35 @@
 """
-YouTube transcript extraction and cleaning pipeline.
+Whisper-based transcript extraction and cleaning pipeline.
 
-Fetches subtitles via youtube-transcript-api, then cleans them:
-- Removes [Music]/[Applause] markers
-- Merges broken sentence fragments
-- Removes filler words
-- Preserves timestamp mapping
+Downloads audio via yt-dlp, then transcribes locally using OpenAI Whisper.
+Replaces the old youtube-transcript-api / yt-dlp caption fetching approach
+to eliminate YouTube transcript rate-limiting issues.
 
-Rate-limit handling:
-- Exponential backoff with jitter on HTTP 429
-- Early-exit on rate-limit in yt-dlp fallback
-- Max 3 language attempts in fallback
+Pipeline:
+1. Download audio (yt-dlp + FFmpeg)
+2. Transcribe with Whisper (local, no API)
+3. Clean transcript segments
+4. Merge short fragments into sentences
+5. Preserve timestamp mapping for chunking
+
+Performance metrics are logged for each transcription.
 """
 
 import logging
-import random
+import os
 import re
 import time
+from functools import lru_cache
 from typing import Optional
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# ── Rate-limit configuration ──────────────────────────────────────
-MAX_RETRIES = 3                # Number of retries on 429
-INITIAL_BACKOFF_SECONDS = 5    # First retry waits 5s
-MAX_BACKOFF_SECONDS = 60       # Cap backoff at 60s
-MAX_FALLBACK_LANGUAGES = 3    # Max languages to try in yt-dlp fallback
+# ── Whisper configuration ─────────────────────────────────────────
+WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
 
 # Filler words/phrases to remove
 FILLER_PATTERNS = [
@@ -40,172 +44,148 @@ MARKER_PATTERN = re.compile(
 )
 
 
-def _is_rate_limited(exc: Exception) -> bool:
-    """Check if an exception is a 429 rate-limit error."""
-    err_str = str(exc)
-    return "429" in err_str or "Too Many Requests" in err_str
+# ── Whisper model singleton ──────────────────────────────────────
 
-
-def _backoff_sleep(attempt: int) -> None:
-    """Sleep with exponential backoff + jitter."""
-    base = min(INITIAL_BACKOFF_SECONDS * (2 ** attempt), MAX_BACKOFF_SECONDS)
-    jitter = random.uniform(0, base * 0.5)
-    wait = base + jitter
-    logger.info(f"Rate-limited — backing off {wait:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
-    time.sleep(wait)
-
-
-def fetch_transcript_ytdlp(video_id: str) -> Optional[list[dict]]:
-    import yt_dlp
-    import requests
-    
-    ydl_opts = {'quiet': True, 'skip_download': True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-        except Exception as e:
-            logger.warning(f"yt-dlp extract_info failed for {video_id}: {type(e).__name__}: {e}", exc_info=True)
-            return None
-            
-    caps = info.get('subtitles', {})
-    if not caps:
-        caps = info.get('automatic_captions', {})
-        
-    if not caps:
-        return None
-        
-    # Try preferred languages first, then any available — but cap at MAX_FALLBACK_LANGUAGES
-    langs_to_try = []
-    for l in ['en', 'hi'] + list(caps.keys()):
-        if l in caps and l not in langs_to_try:
-            langs_to_try.append(l)
-            if len(langs_to_try) >= MAX_FALLBACK_LANGUAGES:
-                break
-            
-    for lang in langs_to_try:
-        url = next((c['url'] for c in caps[lang] if c.get('ext') == 'json3'), None)
-        if not url:
-            continue
-            
-        try:
-            resp = requests.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-            segments = []
-            for ev in data.get('events', []):
-                if 'segs' not in ev:
-                    continue
-                text = "".join(s.get('utf8', '') for s in ev['segs']).strip()
-                if not text:
-                    continue
-                segments.append({
-                    'text': text,
-                    'start': ev['tStartMs'] / 1000.0,
-                    'duration': ev.get('dDurationMs', 0) / 1000.0
-                })
-            
-            if segments:
-                return segments
-        except Exception as e:
-            if _is_rate_limited(e):
-                # Stop trying more languages — all will fail with 429
-                logger.warning(
-                    f"yt-dlp fallback rate-limited for {video_id} (lang={lang}). "
-                    f"Stopping further language attempts."
-                )
-                return None
-            logger.warning(f"yt-dlp fallback request for {lang} failed: {type(e).__name__}: {e}", exc_info=True)
-            continue
-            
-    return None
-
-def fetch_transcript(video_id: str, languages: list[str] = None) -> Optional[list[dict]]:
+@lru_cache(maxsize=1)
+def get_whisper_model():
     """
-    Fetch transcript for a YouTube video with retry + backoff on rate limits.
+    Load and cache the Whisper model (singleton).
 
-    Tries manual captions first, then auto-generated.
-    Falls back to any available language and translates if necessary.
-    Uses yt-dlp as a bulletproof fallback if youtube-transcript-api is blocked.
+    Model is loaded once and reused for all transcriptions.
+    Uses the WHISPER_MODEL env var (default: 'base').
+    """
+    import whisper
 
-    On HTTP 429 (Too Many Requests), retries up to MAX_RETRIES times with
-    exponential backoff before falling back to yt-dlp.
+    logger.info(f"Loading Whisper model: '{WHISPER_MODEL_NAME}'...")
+    start = time.time()
+    model = whisper.load_model(WHISPER_MODEL_NAME)
+    elapsed = time.time() - start
+    logger.info(f"Whisper model '{WHISPER_MODEL_NAME}' loaded in {elapsed:.1f}s")
+    return model
+
+
+# ── Core transcription ───────────────────────────────────────────
+
+def transcribe_video(video_id: str) -> Optional[list[dict]]:
+    """
+    Download audio and transcribe a YouTube video using Whisper.
+
+    Downloads audio via yt-dlp (with cache), runs Whisper locally,
+    and returns transcript segments in the same format as the old
+    youtube-transcript-api: [{text, start, duration}, ...]
+
+    Logs detailed performance metrics after each transcription.
 
     Args:
         video_id: YouTube video ID (e.g., "dQw4w9WgXcQ")
-        languages: Preferred languages (default: ["en"])
 
     Returns:
         List of dicts: {text, start, duration}
-        Or None if no transcript available.
+        Or None if transcription fails.
     """
-    from youtube_transcript_api import YouTubeTranscriptApi
+    from ingestion.audio_downloader import download_audio, cleanup_audio
 
-    if languages is None:
-        languages = ["en"]
+    # Step 1: Download audio
+    try:
+        audio_path = download_audio(video_id)
+    except RuntimeError as e:
+        logger.error(f"Audio download failed for {video_id}: {e}")
+        return None
 
-    last_exception = None
+    # Step 2: Transcribe with Whisper
+    try:
+        model = get_whisper_model()
 
-    for attempt in range(MAX_RETRIES):
-        try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            
-            try:
-                t = transcript_list.find_transcript(languages)
-            except Exception:
-                t = next(iter(transcript_list))
-                if languages and t.is_translatable:
-                    try:
-                        translated_t = t.translate(languages[0])
-                        transcript = translated_t.fetch()
-                        logger.info(f"Fetched translated transcript for {video_id} to {languages[0]}: {len(transcript)} segments")
-                        return transcript
-                    except Exception as trans_e:
-                        if _is_rate_limited(trans_e):
-                            last_exception = trans_e
-                            _backoff_sleep(attempt)
-                            continue
-                        logger.warning(
-                            f"Could not translate transcript for {video_id}: "
-                            f"{type(trans_e).__name__}: {trans_e}",
-                            exc_info=True,
-                        )
-                        
-            transcript = t.fetch()
-            logger.info(f"Fetched transcript for {video_id} (language: {t.language_code}): {len(transcript)} segments")
-            return transcript
+        logger.info(f"Transcribing {video_id} with Whisper ({WHISPER_MODEL_NAME})...")
+        transcribe_start = time.time()
 
-        except Exception as e:
-            last_exception = e
-            if _is_rate_limited(e):
-                if attempt < MAX_RETRIES - 1:
-                    _backoff_sleep(attempt)
-                    continue
-                else:
-                    logger.warning(
-                        f"youtube-transcript-api rate-limited for {video_id} after "
-                        f"{MAX_RETRIES} attempts. Falling back to yt-dlp..."
-                    )
-            else:
-                logger.warning(
-                    f"youtube-transcript-api failed for {video_id}: {type(e).__name__}: {e}. "
-                    f"Falling back to yt-dlp...",
-                    exc_info=True,
-                )
-                break  # Non-rate-limit errors go straight to fallback
-
-    # yt-dlp fallback
-    fallback = fetch_transcript_ytdlp(video_id)
-    if fallback:
-        logger.info(f"Successfully fetched transcript for {video_id} using yt-dlp: {len(fallback)} segments")
-        return fallback
-
-    if last_exception and _is_rate_limited(last_exception):
-        logger.error(
-            f"All transcript methods rate-limited for {video_id}. "
-            f"YouTube is throttling requests from this IP."
+        result = model.transcribe(
+            audio_path,
+            language=None,  # Auto-detect language
+            verbose=False,
         )
-    return None
 
+        transcribe_elapsed = time.time() - transcribe_start
+
+        # Extract segments in the standard format
+        segments = []
+        for seg in result.get("segments", []):
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+            segments.append({
+                "text": text,
+                "start": seg.get("start", 0.0),
+                "duration": seg.get("end", 0.0) - seg.get("start", 0.0),
+            })
+
+        # Log performance metrics
+        full_text = result.get("text", "")
+        detected_lang = result.get("language", "unknown")
+
+        # Estimate audio duration from last segment
+        audio_duration = 0.0
+        if segments:
+            last = segments[-1]
+            audio_duration = last["start"] + last["duration"]
+
+        _log_whisper_metrics(
+            video_id=video_id,
+            audio_duration=audio_duration,
+            transcribe_time=transcribe_elapsed,
+            model_name=WHISPER_MODEL_NAME,
+            transcript_length=len(full_text),
+            segment_count=len(segments),
+            detected_language=detected_lang,
+        )
+
+        if not segments:
+            logger.warning(f"Whisper produced no segments for {video_id}")
+            return None
+
+        # Step 3: Clean up audio cache after successful transcription
+        try:
+            cleanup_audio(video_id)
+        except Exception as e:
+            logger.warning(f"Audio cleanup failed for {video_id}: {e}")
+
+        return segments
+
+    except Exception as e:
+        logger.error(
+            f"Whisper transcription failed for {video_id}: "
+            f"{type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        return None
+
+
+def _log_whisper_metrics(
+    video_id: str,
+    audio_duration: float,
+    transcribe_time: float,
+    model_name: str,
+    transcript_length: int,
+    segment_count: int,
+    detected_language: str,
+) -> None:
+    """Log detailed Whisper performance metrics."""
+    audio_mins = int(audio_duration // 60)
+    audio_secs = int(audio_duration % 60)
+    speed_ratio = audio_duration / transcribe_time if transcribe_time > 0 else 0
+
+    logger.info(
+        f"┌─ Whisper Metrics: {video_id} ────────────────────\n"
+        f"│  Audio Duration  : {audio_mins}m {audio_secs}s\n"
+        f"│  Whisper Model   : {model_name}\n"
+        f"│  Transcription   : {transcribe_time:.1f}s ({speed_ratio:.1f}x realtime)\n"
+        f"│  Transcript Size : {transcript_length:,} chars, {segment_count} segments\n"
+        f"│  Language        : {detected_language}\n"
+        f"└──────────────────────────────────────────────────"
+    )
+
+
+# ── Transcript cleaning (unchanged from original) ────────────────
 
 def clean_transcript_text(text: str) -> str:
     """
@@ -239,7 +219,7 @@ def process_transcript(raw_segments: list[dict]) -> dict:
     4. Maintain a timestamp map for chunks
 
     Args:
-        raw_segments: List of {text, start, duration} dicts from youtube-transcript-api
+        raw_segments: List of {text, start, duration} dicts from Whisper
 
     Returns:
         Dict with:

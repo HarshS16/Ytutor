@@ -240,3 +240,137 @@ def clear_collection(playlist_id: int) -> None:
     # Re-create and cache
     collection = get_collection(playlist_id, client)
     logger.info(f"Recreated empty collection '{collection_name}'")
+
+
+# ── Safe collection swap (temp → live) ─────────────────────────────
+
+def create_temp_collection(playlist_id: int):
+    """
+    Create a temporary staging collection for safe ingestion.
+
+    Ingestion writes to playlist_{id}_temp first. On success, the
+    caller swaps it into the live collection. On failure, the temp
+    is deleted and the live data remains intact.
+
+    Returns:
+        The temporary ChromaDB collection object.
+    """
+    client = get_client()
+    temp_name = f"playlist_{playlist_id}_temp"
+
+    # Delete any leftover temp from a previous failed run
+    _invalidate_collection_cache(temp_name)
+    try:
+        client.delete_collection(temp_name)
+        logger.debug(f"Cleaned up stale temp collection '{temp_name}'")
+    except Exception:
+        pass
+
+    collection = client.get_or_create_collection(
+        name=temp_name,
+        metadata={"hnsw:space": "cosine"},
+    )
+    _collection_cache[temp_name] = collection
+    logger.info(f"Created temp collection '{temp_name}'")
+    return collection
+
+
+def swap_collection(playlist_id: int) -> None:
+    """
+    Atomically replace the live collection with the temp collection.
+
+    1. Delete the current live collection (playlist_{id})
+    2. The temp collection (playlist_{id}_temp) becomes the new
+       source of truth
+
+    Note: ChromaDB doesn't support rename, so we keep the temp name
+    and update the cache mapping so get_collection() returns it.
+    Actually, we recreate: copy data from temp → new live, delete temp.
+    """
+    client = get_client()
+    live_name = f"playlist_{playlist_id}"
+    temp_name = f"playlist_{playlist_id}_temp"
+
+    # Get the temp collection
+    try:
+        temp_col = client.get_collection(temp_name)
+    except Exception:
+        logger.error(f"Temp collection '{temp_name}' not found — cannot swap")
+        raise RuntimeError(f"Temp collection '{temp_name}' not found")
+
+    temp_count = temp_col.count()
+    if temp_count == 0:
+        logger.warning(f"Temp collection '{temp_name}' is empty — swap skipped")
+        cleanup_temp_collection(playlist_id)
+        return
+
+    # Delete the old live collection
+    _invalidate_collection_cache(live_name)
+    try:
+        client.delete_collection(live_name)
+        logger.info(f"Deleted old live collection '{live_name}'")
+    except Exception:
+        logger.debug(f"No existing live collection '{live_name}' to delete")
+
+    # Recreate live collection and copy data from temp
+    live_col = client.get_or_create_collection(
+        name=live_name,
+        metadata={"hnsw:space": "cosine"},
+    )
+
+    # Fetch all data from temp in batches
+    batch_size = 100
+    offset = 0
+    total_copied = 0
+
+    while offset < temp_count:
+        batch = temp_col.get(
+            limit=batch_size,
+            offset=offset,
+            include=["documents", "embeddings", "metadatas"],
+        )
+
+        if not batch["ids"]:
+            break
+
+        live_col.upsert(
+            ids=batch["ids"],
+            documents=batch["documents"],
+            embeddings=batch["embeddings"],
+            metadatas=batch["metadatas"],
+        )
+
+        total_copied += len(batch["ids"])
+        offset += batch_size
+
+    # Cache the new live collection
+    _collection_cache[live_name] = live_col
+
+    # Delete temp
+    _invalidate_collection_cache(temp_name)
+    try:
+        client.delete_collection(temp_name)
+    except Exception:
+        pass
+
+    logger.info(
+        f"Collection swap complete: '{temp_name}' → '{live_name}' "
+        f"({total_copied} documents)"
+    )
+
+
+def cleanup_temp_collection(playlist_id: int) -> None:
+    """
+    Delete the temp collection after a failed ingestion.
+
+    The live collection remains untouched.
+    """
+    client = get_client()
+    temp_name = f"playlist_{playlist_id}_temp"
+
+    _invalidate_collection_cache(temp_name)
+    try:
+        client.delete_collection(temp_name)
+        logger.info(f"Cleaned up temp collection '{temp_name}'")
+    except Exception:
+        logger.debug(f"No temp collection '{temp_name}' to clean up")

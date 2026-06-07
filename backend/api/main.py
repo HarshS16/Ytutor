@@ -158,15 +158,28 @@ app.include_router(quiz_router)
 app.include_router(export_router)
 
 
+# ── Prerequisite status (populated at startup) ────────────────────
+_prerequisites: dict[str, bool] = {}
+
+
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database and pre-load embedding model."""
+    """Initialize database, check prerequisites, and pre-load models."""
+    global _prerequisites
     logger.info("Starting Ytutor AI...")
 
     # Initialize database tables
     from db.database import init_db
     await init_db()
     logger.info("Database initialized")
+
+    # Check FFmpeg + Node.js prerequisites
+    from ingestion.audio_downloader import check_prerequisites
+    _prerequisites = await asyncio.to_thread(check_prerequisites)
+    if not _prerequisites.get("ffmpeg"):
+        logger.warning("⚠️  FFmpeg not found — Whisper transcription will fail!")
+    if not _prerequisites.get("node"):
+        logger.warning("⚠️  Node.js not found — yt-dlp may fail on modern YouTube pages!")
 
     # Pre-load embedding model in background
     logger.info("Scheduling model pre-load...")
@@ -185,7 +198,7 @@ async def startup_event():
 # ── Health endpoint ────────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint with prerequisite status."""
     try:
         model_loaded = False
         try:
@@ -195,10 +208,19 @@ async def health():
         except Exception:
             pass
 
+        # Determine overall health
+        ffmpeg_ok = _prerequisites.get("ffmpeg", False)
+        node_ok = _prerequisites.get("node", False)
+        overall = "ok" if (model_loaded and ffmpeg_ok) else "degraded"
+
         return {
-            "status": "ok",
+            "status": overall,
             "service": "Ytutor AI",
             "model_loaded": model_loaded,
+            "prerequisites": {
+                "ffmpeg": ffmpeg_ok,
+                "node": node_ok,
+            },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:

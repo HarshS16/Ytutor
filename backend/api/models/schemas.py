@@ -164,7 +164,7 @@ class ExportRequest(BaseModel):
 # ── Processing Status ────────────────────────────────────────────
 
 class ProcessingStatus(BaseModel):
-    """Playlist processing status."""
+    """Playlist processing status with live progress."""
     playlist_id: int
     status: str
     videos_total: int = 0
@@ -172,3 +172,5 @@ class ProcessingStatus(BaseModel):
     videos_failed: int = 0
     total_chunks: int = 0
     progress_percent: float = 0
+    current_video: Optional[int] = None
+    current_video_title: Optional[str] = None
