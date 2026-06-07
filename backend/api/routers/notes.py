@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.schemas import NotesGenerateRequest, NoteResponse, NotesListResponse
+from api.auth import get_current_user
 from db.database import get_db
 from db import crud
 from generators.notes import generate_notes
@@ -25,11 +26,15 @@ router = APIRouter(prefix="/api", tags=["notes"])
 async def generate_notes_endpoint(
     request: NotesGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Generate notes for a playlist (or specific video)."""
     playlist = await crud.get_playlist(db, request.playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
     if playlist.status != "ready":
         raise HTTPException(status_code=400, detail="Playlist is not ready yet")
@@ -86,8 +91,19 @@ async def generate_notes_endpoint(
 
 
 @router.get("/notes/{playlist_id}", response_model=NotesListResponse)
-async def get_notes(playlist_id: int, db: AsyncSession = Depends(get_db)):
-    """Get all generated notes for a playlist."""
+async def get_notes(
+    playlist_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Get generated notes for a playlist."""
+    playlist = await crud.get_playlist(db, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
+
     notes = await crud.get_playlist_notes(db, playlist_id)
     return NotesListResponse(
         notes=[

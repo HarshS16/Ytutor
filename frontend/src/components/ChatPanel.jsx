@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, BrainCircuit, User, Clock, Video, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { chatQuery } from '../api/client';
+import { chatQuery, getChatHistory } from '../api/client';
 
 function SourceBadge({ source }) {
   const ts = source.timestamp_display || '';
@@ -94,6 +94,22 @@ export default function ChatPanel({ playlistId }) {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const history = await getChatHistory(playlistId);
+        if (history && history.length > 0) {
+          setMessages(history);
+        }
+      } catch (err) {
+        console.error("Failed to load chat history", err);
+      }
+    };
+    if (playlistId) {
+      fetchHistory();
+    }
+  }, [playlistId]);
 
   const handleSend = async () => {
     const msg = input.trim();

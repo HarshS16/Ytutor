@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageCircle, FileText, Layers, HelpCircle, Download,
   GraduationCap, ArrowLeft, Video, Clock, CheckCircle2,
-  AlertCircle, Loader2, ChevronRight,
+  AlertCircle, Loader2, ChevronRight, User, LogOut
 } from 'lucide-react';
-import { getPlaylist, getExportPdfUrl } from '../api/client';
+import { getPlaylist } from '../api/client';
+import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import ChatPanel from '../components/ChatPanel';
 import NotesPanel from '../components/NotesPanel';
 import FlashcardsPanel from '../components/FlashcardsPanel';
@@ -84,10 +86,12 @@ function VideoSidebar({ videos, collapsed, onToggle }) {
 export default function Workspace() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [playlist, setPlaylist] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('chat');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -103,6 +107,29 @@ export default function Workspace() {
     }
     load();
   }, [id]);
+
+  const handleExportPDF = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const response = await api.get(`/api/export/pdf/${playlist.id}`, {
+        responseType: 'blob', // Important: tell axios to expect a binary file
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `ytutor_${playlist.title.substring(0, 50).replace(/ /g, '_')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (err) {
+      console.error("Failed to export PDF", err);
+      alert("Failed to export PDF. Have you generated notes, flashcards, or quizzes yet?");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -140,14 +167,34 @@ export default function Workspace() {
           </div>
         </div>
 
-        <a
-          href={getExportPdfUrl(playlist.id)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-secondary !px-3 !py-1.5 text-xs flex items-center gap-1.5"
-        >
-          <Download className="w-3.5 h-3.5" /> PDF
-        </a>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleExportPDF}
+            disabled={exporting}
+            className="btn-secondary !px-3 !py-1.5 text-xs flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            PDF
+          </button>
+
+          <div className="w-px h-6 bg-white/[0.08]" />
+
+          <div className="flex items-center gap-2 text-zinc-400">
+            <User className="w-4 h-4" />
+            <span className="text-sm font-medium">{user?.username}</span>
+          </div>
+
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+            title="Log out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </header>
 
       {/* ── Main Content ───────────────────────────────────────── */}

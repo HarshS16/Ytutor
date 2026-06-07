@@ -4,7 +4,28 @@ Pydantic request/response schemas for Ytutor AI API.
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
+
+
+# ── Auth Schemas ──────────────────────────────────────────────────
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6)
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
 
 
 # ── Playlist Schemas ──────────────────────────────────────────────

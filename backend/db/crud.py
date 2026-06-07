@@ -11,16 +11,47 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from db.models import Playlist, Video, Chunk, Note, Flashcard, Quiz
+from db.models import Playlist, Video, Chunk, Note, Flashcard, Quiz, User, ChatMessage
 
 logger = logging.getLogger(__name__)
 
 
+# ── User CRUD ───────────────────────────────────────────────────────
+
+async def get_user_by_id(db: AsyncSession, user_id: int) -> Optional[User]:
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalars().first()
+
+async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
+    result = await db.execute(select(User).where(User.email == email))
+    return result.scalars().first()
+
+async def get_user_by_username(db: AsyncSession, username: str) -> Optional[User]:
+    result = await db.execute(select(User).where(User.username == username))
+    return result.scalars().first()
+
+async def create_user(db: AsyncSession, email: str, username: str, password_hash: str) -> User:
+    db_user = User(email=email, username=username, password_hash=password_hash)
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+    return db_user
+
+
 # ── Playlist CRUD ─────────────────────────────────────────────────
 
-async def create_playlist(db: AsyncSession, **kwargs) -> Playlist:
+async def create_playlist(
+    db: AsyncSession, 
+    playlist_url: str, 
+    youtube_playlist_id: str,
+    user_id: Optional[int] = None,
+) -> Playlist:
     """Create a new playlist record."""
-    playlist = Playlist(**kwargs)
+    playlist = Playlist(
+        playlist_url=playlist_url,
+        youtube_playlist_id=youtube_playlist_id,
+        user_id=user_id,
+    )
     db.add(playlist)
     await db.commit()
     await db.refresh(playlist)
@@ -42,11 +73,12 @@ async def get_playlist_by_youtube_id(db: AsyncSession, youtube_playlist_id: str)
     return result.scalar_one_or_none()
 
 
-async def get_all_playlists(db: AsyncSession) -> list[Playlist]:
-    """Get all playlists, ordered by creation date descending."""
-    result = await db.execute(
-        select(Playlist).order_by(Playlist.created_at.desc())
-    )
+async def get_all_playlists(db: AsyncSession, user_id: Optional[int] = None) -> list[Playlist]:
+    """Get all playlists, optionally filtered by user."""
+    stmt = select(Playlist).order_by(Playlist.created_at.desc())
+    if user_id is not None:
+        stmt = stmt.where(Playlist.user_id == user_id)
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -224,9 +256,7 @@ async def create_quizzes_batch(db: AsyncSession, quizzes_data: list[dict]) -> li
 async def get_playlist_quizzes(db: AsyncSession, playlist_id: int) -> list[Quiz]:
     """Get all quiz questions for a playlist."""
     result = await db.execute(
-        select(Quiz)
-        .where(Quiz.playlist_id == playlist_id)
-        .order_by(Quiz.created_at.desc())
+        select(Quiz).where(Quiz.playlist_id == playlist_id).order_by(Quiz.id)
     )
     return list(result.scalars().all())
 
@@ -240,3 +270,37 @@ async def delete_playlist_quizzes(db: AsyncSession, playlist_id: int) -> None:
     for quiz in quizzes:
         await db.delete(quiz)
     await db.commit()
+
+
+# ── Chat History CRUD ──────────────────────────────────────────────
+
+async def save_chat_message(
+    db: AsyncSession,
+    user_id: int,
+    playlist_id: int,
+    role: str,
+    content: str,
+    sources: Optional[list] = None
+) -> ChatMessage:
+    """Save a chat message to history."""
+    msg = ChatMessage(
+        user_id=user_id,
+        playlist_id=playlist_id,
+        role=role,
+        content=content,
+        sources=sources
+    )
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+    return msg
+
+
+async def get_chat_history(db: AsyncSession, user_id: int, playlist_id: int) -> list[ChatMessage]:
+    """Get chat history for a specific user and playlist."""
+    result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.user_id == user_id, ChatMessage.playlist_id == playlist_id)
+        .order_by(ChatMessage.created_at.asc())
+    )
+    return list(result.scalars().all())

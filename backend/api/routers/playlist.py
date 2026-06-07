@@ -23,6 +23,7 @@ from db import crud
 from ingestion.youtube import fetch_playlist_metadata, extract_playlist_id
 from ingestion.pipeline import run_ingestion
 from ingestion.vector_store import get_collection_stats
+from api.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ async def import_playlist(
     request: PlaylistImportRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     """
     Import a YouTube playlist.
@@ -127,7 +129,7 @@ async def import_playlist(
         )
         raise HTTPException(status_code=502, detail=f"Failed to fetch playlist from YouTube: {str(e)}")
 
-    # Create playlist record
+    # Create new playlist record with user_id
     playlist = await crud.create_playlist(
         db,
         playlist_url=request.playlist_url,
@@ -138,6 +140,7 @@ async def import_playlist(
         channel=metadata.get("channel", ""),
         video_count=len(metadata["videos"]),
         status="extracting",
+        user_id=current_user.id
     )
 
     # Create video records
@@ -175,9 +178,12 @@ async def import_playlist(
 
 
 @router.get("/playlists", response_model=PlaylistListResponse)
-async def list_playlists(db: AsyncSession = Depends(get_db)):
-    """List all imported playlists."""
-    playlists = await crud.get_all_playlists(db)
+async def list_playlists(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """List all playlists for the current user."""
+    playlists = await crud.get_all_playlists(db, user_id=current_user.id)
     return PlaylistListResponse(
         playlists=[
             PlaylistResponse(
@@ -200,11 +206,19 @@ async def list_playlists(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/playlist/{playlist_id}", response_model=PlaylistWithVideosResponse)
-async def get_playlist(playlist_id: int, db: AsyncSession = Depends(get_db)):
-    """Get playlist details with all video info."""
+async def get_playlist_details(
+    playlist_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Get full details of a playlist including all its videos."""
     playlist = await crud.get_playlist(db, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    # Check ownership (allow access if unowned for backward compatibility)
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
     videos = await crud.get_playlist_videos(db, playlist_id)
 
@@ -237,11 +251,18 @@ async def get_playlist(playlist_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/playlist/{playlist_id}/status", response_model=ProcessingStatus)
-async def get_playlist_status(playlist_id: int, db: AsyncSession = Depends(get_db)):
+async def get_playlist_status(
+    playlist_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Get processing status for a playlist, with live progress if running."""
     playlist = await crud.get_playlist(db, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
     videos = await crud.get_playlist_videos(db, playlist_id)
     processed = sum(1 for v in videos if v.status in ("ready", "no_transcript"))
@@ -277,11 +298,20 @@ async def get_playlist_status(playlist_id: int, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/playlist/{playlist_id}")
-async def delete_playlist(playlist_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete a playlist and all associated data."""
+async def delete_playlist(
+    playlist_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Delete a playlist and all associated data.
+    """
     playlist = await crud.get_playlist(db, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this playlist")
 
     # Clear vector store
     try:

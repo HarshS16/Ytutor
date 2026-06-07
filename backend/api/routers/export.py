@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from db import crud
+from api.auth import get_current_user
 from generators.pdf_export import generate_pdf
 
 logger = logging.getLogger(__name__)
@@ -20,11 +21,18 @@ router = APIRouter(prefix="/api", tags=["export"])
 
 
 @router.get("/export/pdf/{playlist_id}")
-async def export_pdf(playlist_id: int, db: AsyncSession = Depends(get_db)):
+async def export_pdf(
+    playlist_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Export playlist content as a PDF document."""
     playlist = await crud.get_playlist(db, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
     # Gather all content
     notes = await crud.get_playlist_notes(db, playlist_id)

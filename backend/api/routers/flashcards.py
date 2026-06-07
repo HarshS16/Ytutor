@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.schemas import FlashcardGenerateRequest, FlashcardResponse, FlashcardsListResponse
+from api.auth import get_current_user
 from db.database import get_db
 from db import crud
 from generators.flashcards import generate_flashcards
@@ -25,11 +26,15 @@ router = APIRouter(prefix="/api", tags=["flashcards"])
 async def generate_flashcards_endpoint(
     request: FlashcardGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Generate flashcards from playlist transcripts."""
     playlist = await crud.get_playlist(db, request.playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
     if playlist.status != "ready":
         raise HTTPException(status_code=400, detail="Playlist is not ready yet")
@@ -97,8 +102,19 @@ async def generate_flashcards_endpoint(
 
 
 @router.get("/flashcards/{playlist_id}", response_model=FlashcardsListResponse)
-async def get_flashcards(playlist_id: int, db: AsyncSession = Depends(get_db)):
+async def get_flashcards(
+    playlist_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Get all flashcards for a playlist."""
+    playlist = await crud.get_playlist(db, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
+        
     flashcards = await crud.get_playlist_flashcards(db, playlist_id)
     return FlashcardsListResponse(
         flashcards=[

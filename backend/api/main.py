@@ -143,6 +143,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ── Import and include routers ─────────────────────────────────────
+from api.routers.auth import router as auth_router
 from api.routers.playlist import router as playlist_router
 from api.routers.chat import router as chat_router
 from api.routers.notes import router as notes_router
@@ -150,6 +151,7 @@ from api.routers.flashcards import router as flashcards_router
 from api.routers.quiz import router as quiz_router
 from api.routers.export import router as export_router
 
+app.include_router(auth_router)
 app.include_router(playlist_router)
 app.include_router(chat_router)
 app.include_router(notes_router)

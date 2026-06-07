@@ -12,6 +12,42 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Add a request interceptor to attach JWT token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('ytutor_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// ── Auth APIs ─────────────────────────────────────────────────────
+
+export async function login(email, password) {
+  // OAuth2 token endpoint expects form-urlencoded payload
+  const params = new URLSearchParams();
+  params.append('username', email);
+  params.append('password', password);
+  
+  const res = await api.post('/api/auth/login', params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+  return res.data;
+}
+
+export async function signup(email, username, password) {
+  const res = await api.post('/api/auth/signup', { email, username, password });
+  return res.data;
+}
+
+export async function getMe() {
+  const res = await api.get('/api/auth/me');
+  return res.data;
+}
+
 // ── Playlist APIs ─────────────────────────────────────────────────
 
 export async function importPlaylist(playlistUrl) {
@@ -46,6 +82,11 @@ export async function chatQuery(playlistId, message) {
     playlist_id: playlistId,
     message,
   });
+  return res.data;
+}
+
+export async function getChatHistory(playlistId) {
+  const res = await api.get(`/api/chat/history/${playlistId}`);
   return res.data;
 }
 
@@ -98,7 +139,13 @@ export async function getQuiz(playlistId) {
 // ── Export APIs ────────────────────────────────────────────────────
 
 export function getExportPdfUrl(playlistId) {
-  return `${API_BASE}/api/export/pdf/${playlistId}`;
+  const token = localStorage.getItem('ytutor_token');
+  const url = new URL(`${API_BASE}/api/export/pdf/${playlistId}`);
+  // In a real app we'd pass token via a signed URL or cookie for file downloads,
+  // but for simplicity, we rely on the backend checking headers.
+  // Wait, the backend requires Authorization header. A direct browser link won't send it.
+  // We'll update the export button to fetch the blob via Axios instead.
+  return url.toString();
 }
 
 // ── Health ────────────────────────────────────────────────────────

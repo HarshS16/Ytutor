@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, GraduationCap, Loader2, Trash2, ArrowRight,
   Clock, Video, CheckCircle2, AlertCircle, RefreshCw,
-  X,
+  X, LogOut, User
 } from 'lucide-react';
 import { getPlaylists, importPlaylist, deletePlaylist, getPlaylistStatus } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 function ImportModal({ isOpen, onClose, onImport }) {
   const [url, setUrl] = useState('');
@@ -244,6 +245,7 @@ export default function Dashboard() {
   const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
+  const { user, logout } = useAuth();
 
   const fetchPlaylists = async () => {
     try {
@@ -283,12 +285,32 @@ export default function Dashboard() {
             <span className="text-lg font-bold gradient-text">Ytutor AI</span>
           </div>
 
-          <button
-            onClick={() => setShowImport(true)}
-            className="btn-primary text-sm !px-5 !py-2.5 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" /> Import Playlist
-          </button>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-zinc-400 bg-dark-200 px-3 py-1.5 rounded-lg border border-white/[0.04]">
+              <User className="w-4 h-4" />
+              <span className="text-sm font-medium">{user?.username}</span>
+            </div>
+            
+            <button
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
+              className="p-2 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+              title="Log out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+
+            <div className="w-px h-6 bg-white/[0.08] mx-1"></div>
+
+            <button
+              onClick={() => setShowImport(true)}
+              className="btn-primary text-sm !px-5 !py-2.5 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Import Playlist
+            </button>
+          </div>
         </div>
       </header>
 

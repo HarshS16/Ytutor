@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.schemas import QuizGenerateRequest, QuizQuestionResponse, QuizListResponse
+from api.auth import get_current_user
 from db.database import get_db
 from db import crud
 from generators.quiz import generate_quiz
@@ -25,11 +26,15 @@ router = APIRouter(prefix="/api", tags=["quiz"])
 async def generate_quiz_endpoint(
     request: QuizGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Generate quiz questions from playlist transcripts."""
     playlist = await crud.get_playlist(db, request.playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
     if playlist.status != "ready":
         raise HTTPException(status_code=400, detail="Playlist is not ready yet")
@@ -94,8 +99,19 @@ async def generate_quiz_endpoint(
 
 
 @router.get("/quiz/{playlist_id}", response_model=QuizListResponse)
-async def get_quiz(playlist_id: int, db: AsyncSession = Depends(get_db)):
+async def get_quiz(
+    playlist_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Get all quiz questions for a playlist."""
+    playlist = await crud.get_playlist(db, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+        
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
+        
     quizzes = await crud.get_playlist_quizzes(db, playlist_id)
     return QuizListResponse(
         questions=[

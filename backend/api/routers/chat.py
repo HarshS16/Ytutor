@@ -12,10 +12,14 @@ import logging
 import os
 import re
 import time
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.schemas import ChatRequest, ChatResponse, SourceCitation
+from api.auth import get_current_user
+from db.database import get_db
+from db import crud
 from api.services.retriever import retrieve
 from api.services.prompt_builder import (
     build_chat_prompt, build_conversational_prompt, get_no_context_response,
@@ -76,7 +80,11 @@ def _build_sources(chunks: list[dict]) -> list[SourceCitation]:
 
 
 @router.post("/chat/query", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """
     Process a user chat message through the RAG pipeline (blocking).
 
@@ -90,6 +98,22 @@ async def chat(request: ChatRequest):
     user_message = request.message.strip()
 
     logger.info(f"Chat: playlist={request.playlist_id}, msg='{user_message[:100]}'")
+
+    # Verify playlist ownership
+    playlist = await crud.get_playlist(db, request.playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
+
+    # Save user message to history
+    await crud.save_chat_message(
+        db, 
+        user_id=current_user.id, 
+        playlist_id=request.playlist_id, 
+        role="user", 
+        content=user_message
+    )
 
     # ── Step 1: Check for conversational messages ──────────────────
     if is_conversational_message(user_message):
@@ -111,6 +135,16 @@ async def chat(request: ChatRequest):
         logger.info(f"Response time: {elapsed}s (conversational, light model)")
 
         answer = result.get("content", result.get("error", "Something went wrong."))
+        
+        # Save assistant message to history
+        await crud.save_chat_message(
+            db, 
+            user_id=current_user.id, 
+            playlist_id=request.playlist_id, 
+            role="assistant", 
+            content=answer
+        )
+        
         return ChatResponse(answer=answer, sources=[], found_context=False)
 
     # ── Step 2: Retrieve relevant chunks ───────────────────────────
@@ -140,6 +174,16 @@ async def chat(request: ChatRequest):
             )
 
         answer = result.get("content", get_no_context_response())
+        
+        # Save assistant message
+        await crud.save_chat_message(
+            db, 
+            user_id=current_user.id, 
+            playlist_id=request.playlist_id, 
+            role="assistant", 
+            content=answer
+        )
+        
         return ChatResponse(answer=answer, sources=[], found_context=False)
 
     # ── Step 4: Build RAG prompt ───────────────────────────────────
@@ -164,6 +208,16 @@ async def chat(request: ChatRequest):
     elapsed = round(time.time() - start_time, 2)
     logger.info(f"Response time: {elapsed}s | Sources: {len(sources)}")
 
+    # Save assistant message with sources
+    await crud.save_chat_message(
+        db, 
+        user_id=current_user.id, 
+        playlist_id=request.playlist_id, 
+        role="assistant", 
+        content=result["content"],
+        sources=[s.model_dump() for s in sources]
+    )
+
     return ChatResponse(
         answer=result["content"],
         sources=sources,
@@ -174,7 +228,11 @@ async def chat(request: ChatRequest):
 # ── SSE Streaming Endpoint ─────────────────────────────────────────
 
 @router.post("/chat/query/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """
     Stream a chat response via Server-Sent Events (SSE).
 
@@ -190,6 +248,22 @@ async def chat_stream(request: ChatRequest):
 
     logger.info(f"Chat stream: playlist={request.playlist_id}, msg='{user_message[:100]}'")
 
+    # Verify playlist ownership
+    playlist = await crud.get_playlist(db, request.playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
+
+    # Save user message
+    await crud.save_chat_message(
+        db, 
+        user_id=current_user.id, 
+        playlist_id=request.playlist_id, 
+        role="user", 
+        content=user_message
+    )
+
     # ── Conversational messages — don't stream, just respond fast ──
     if is_conversational_message(user_message):
         logger.info("Streaming: conversational message — using light model")
@@ -197,13 +271,25 @@ async def chat_stream(request: ChatRequest):
 
         async def conv_stream():
             try:
+                full_content = ""
                 for token in get_completion_stream(
                     system_prompt=prompt_data["system_prompt"],
                     user_message=prompt_data["user_message"],
                     model=GROQ_MODEL_LIGHT,
                     max_tokens=300,
                 ):
+                    full_content += token
                     yield f"data: {json.dumps({'token': token})}\n\n"
+                
+                # Save assistant message when done
+                await crud.save_chat_message(
+                    db, 
+                    user_id=current_user.id, 
+                    playlist_id=request.playlist_id, 
+                    role="assistant", 
+                    content=full_content
+                )
+                
                 yield f"data: {json.dumps({'done': True, 'sources': [], 'found_context': False})}\n\n"
             except Exception as e:
                 logger.error(f"Stream error (conversational): {e}", exc_info=True)
@@ -229,13 +315,24 @@ async def chat_stream(request: ChatRequest):
 
         async def no_ctx_stream():
             try:
+                full_content = ""
                 for token in get_completion_stream(
                     system_prompt=prompt_data["system_prompt"],
                     user_message=prompt_data["user_message"],
                     model=GROQ_MODEL_LIGHT,
                     max_tokens=500,
                 ):
+                    full_content += token
                     yield f"data: {json.dumps({'token': token})}\n\n"
+                    
+                # Save assistant message
+                await crud.save_chat_message(
+                    db, 
+                    user_id=current_user.id, 
+                    playlist_id=request.playlist_id, 
+                    role="assistant", 
+                    content=full_content
+                )
                 yield f"data: {json.dumps({'done': True, 'sources': [], 'found_context': False})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -262,11 +359,23 @@ async def chat_stream(request: ChatRequest):
 
     async def rag_stream():
         try:
+            full_content = ""
             for token in get_completion_stream(
                 system_prompt=prompt_data["system_prompt"],
                 user_message=prompt_data["user_message"],
             ):
+                full_content += token
                 yield f"data: {json.dumps({'token': token})}\n\n"
+
+            # Save assistant message with sources
+            await crud.save_chat_message(
+                db, 
+                user_id=current_user.id, 
+                playlist_id=request.playlist_id, 
+                role="assistant", 
+                content=full_content,
+                sources=sources_json
+            )
 
             # Final event with sources
             yield f"data: {json.dumps({'done': True, 'sources': sources_json, 'found_context': True})}\n\n"
@@ -276,3 +385,31 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(rag_stream(), media_type="text/event-stream")
+
+
+@router.get("/chat/history/{playlist_id}")
+async def get_history(
+    playlist_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Retrieve chat history for a playlist."""
+    # Verify playlist ownership
+    playlist = await crud.get_playlist(db, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    if playlist.user_id is not None and playlist.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
+        
+    history = await crud.get_chat_history(db, user_id=current_user.id, playlist_id=playlist_id)
+    
+    return [
+        {
+            "id": msg.id,
+            "role": msg.role,
+            "content": msg.content,
+            "sources": msg.sources or [],
+            "created_at": msg.created_at
+        }
+        for msg in history
+    ]

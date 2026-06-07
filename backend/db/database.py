@@ -14,10 +14,24 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./ytutor.db")
 
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Neon DB adds query parameters like ?sslmode=require that asyncpg doesn't support directly
+# or that break when parsed. We can safely strip the query string from the URL.
+if "?" in DATABASE_URL and "sqlite" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.split("?")[0]
+
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False},  # SQLite-specific
+    connect_args=connect_args,
 )
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
