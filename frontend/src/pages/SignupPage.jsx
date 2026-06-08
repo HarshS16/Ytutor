@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { UserPlus, AlertCircle } from 'lucide-react';
+import { UserPlus, AlertCircle, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function SignupPage() {
@@ -47,6 +47,17 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#f8faff] text-slate-900 font-sans p-4 py-12">
+      {/* Back button */}
+      <Link 
+        to="/" 
+        className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-2 text-slate-500 hover:text-blue-600 font-medium transition-colors z-20 group"
+      >
+        <div className="p-2 bg-white rounded-full shadow-sm border border-slate-200 group-hover:border-blue-200 group-hover:bg-blue-50 transition-all group-hover:scale-105">
+          <ArrowLeft className="w-5 h-5" />
+        </div>
+        <span className="hidden sm:inline">Back to Home</span>
+      </Link>
+
       {/* Background gradients */}
       <motion.div 
         animate={{ scale: [1, 1.1, 1], opacity: [0.03, 0.08, 0.03] }}
