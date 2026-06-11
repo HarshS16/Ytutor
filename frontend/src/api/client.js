@@ -48,6 +48,20 @@ export async function getMe() {
   return res.data;
 }
 
+export async function forgotPassword(email) {
+  const res = await api.post('/api/auth/forgot-password', { email });
+  return res.data;
+}
+
+export async function resetPassword(email, otp, newPassword) {
+  const res = await api.post('/api/auth/reset-password', {
+    email,
+    otp,
+    new_password: newPassword,
+  });
+  return res.data;
+}
+
 // ── Playlist APIs ─────────────────────────────────────────────────
 
 export async function importPlaylist(playlistUrl) {

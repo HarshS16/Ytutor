@@ -37,6 +37,13 @@ async def create_user(db: AsyncSession, email: str, username: str, password_hash
     await db.refresh(db_user)
     return db_user
 
+async def update_user_password(db: AsyncSession, user_id: int, new_password_hash: str) -> None:
+    """Update a user's password hash."""
+    stmt = update(User).where(User.id == user_id).values(password_hash=new_password_hash)
+    await db.execute(stmt)
+    await db.commit()
+    logger.info(f"Password updated for user {user_id}")
+
 
 # ── Playlist CRUD ─────────────────────────────────────────────────
 
@@ -45,12 +52,24 @@ async def create_playlist(
     playlist_url: str, 
     youtube_playlist_id: str,
     user_id: Optional[int] = None,
+    title: str = "",
+    description: str = "",
+    thumbnail: str = "",
+    channel: str = "",
+    video_count: int = 0,
+    status: str = "pending",
 ) -> Playlist:
     """Create a new playlist record."""
     playlist = Playlist(
         playlist_url=playlist_url,
         youtube_playlist_id=youtube_playlist_id,
         user_id=user_id,
+        title=title,
+        description=description,
+        thumbnail=thumbnail,
+        channel=channel,
+        video_count=video_count,
+        status=status,
     )
     db.add(playlist)
     await db.commit()

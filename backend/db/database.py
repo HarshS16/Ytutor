@@ -32,6 +32,8 @@ engine = create_async_engine(
     DATABASE_URL,
     echo=False,
     connect_args=connect_args,
+    pool_pre_ping=True,   # Test connections before use — fixes NeonDB idle disconnects
+    pool_recycle=300,      # Recycle connections every 5 min (before NeonDB's timeout)
 )
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

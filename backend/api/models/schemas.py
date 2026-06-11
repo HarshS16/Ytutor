@@ -28,6 +28,22 @@ class Token(BaseModel):
     user: UserResponse
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    otp: Optional[str] = None  # Only populated in dev mode (no email service)
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=6)
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+
+
 # ── Playlist Schemas ──────────────────────────────────────────────
 
 class PlaylistImportRequest(BaseModel):

@@ -1,9 +1,11 @@
 """
 Authentication utilities for Ytutor.
-Handles password hashing and JWT token generation/verification.
+Handles password hashing, JWT token generation/verification,
+and password reset OTP management.
 """
 
 import os
+import secrets
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
@@ -16,6 +18,12 @@ from db.database import get_db
 from db import crud
 
 load_dotenv()
+
+# ── Password Reset OTP Store ──────────────────────────────────────
+# In-memory store: { email: { "otp": str, "expires_at": datetime } }
+# In production, replace with Redis or a DB table + real email delivery.
+_password_reset_store: dict[str, dict] = {}
+RESET_OTP_EXPIRE_MINUTES = 10
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fallback-secret-key-do-not-use-in-prod")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
@@ -73,3 +81,34 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     if user is None:
         raise credentials_exception
     return user
+
+
+# ── Password Reset OTP Functions ──────────────────────────────────
+
+def generate_reset_otp(email: str) -> str:
+    """Generate a 6-digit OTP for password reset and store it."""
+    otp = f"{secrets.randbelow(1000000):06d}"
+    _password_reset_store[email.lower()] = {
+        "otp": otp,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=RESET_OTP_EXPIRE_MINUTES),
+    }
+    return otp
+
+
+def verify_reset_otp(email: str, otp: str) -> bool:
+    """Verify a password reset OTP. Returns True if valid and not expired."""
+    entry = _password_reset_store.get(email.lower())
+    if not entry:
+        return False
+    if entry["otp"] != otp:
+        return False
+    if datetime.now(timezone.utc) > entry["expires_at"]:
+        # Expired — clean up
+        _password_reset_store.pop(email.lower(), None)
+        return False
+    return True
+
+
+def clear_reset_otp(email: str) -> None:
+    """Remove the OTP entry after successful password reset."""
+    _password_reset_store.pop(email.lower(), None)
