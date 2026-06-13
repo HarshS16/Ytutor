@@ -15,14 +15,14 @@ function SourceBadge({ source }) {
       href={videoUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary-500/8 border border-primary-500/15 text-xs text-primary-300 hover:bg-primary-500/15 hover:border-primary-500/30 transition-all group"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-primary-500/8 border border-blue-100 dark:border-primary-500/15 text-xs text-blue-700 dark:text-primary-300 hover:bg-blue-100 dark:hover:bg-primary-500/15 hover:border-blue-200 dark:hover:border-primary-500/30 transition-all group"
     >
-      <Video className="w-3 h-3 text-primary-400 group-hover:text-primary-300" />
+      <Video className="w-3 h-3 text-blue-500 dark:text-primary-400 group-hover:text-blue-600 dark:group-hover:text-primary-300" />
       <span className="max-w-[200px] truncate">{source.video_title}</span>
       {ts && (
         <>
-          <Clock className="w-3 h-3 text-zinc-500" />
-          <span className="text-zinc-400">{ts}</span>
+          <Clock className="w-3 h-3 text-slate-400 dark:text-zinc-500" />
+          <span className="text-slate-500 dark:text-zinc-400">{ts}</span>
         </>
       )}
     </a>
@@ -39,7 +39,7 @@ function MessageBubble({ message }) {
       className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
     >
       {!isUser && (
-        <div className="w-8 h-8 rounded-xl bg-gradient-primary flex items-center justify-center flex-shrink-0 mt-1">
+        <div className="w-8 h-8 rounded-xl bg-blue-600 dark:bg-gradient-primary flex items-center justify-center flex-shrink-0 mt-1 shadow-sm dark:shadow-none">
           <BrainCircuit className="w-4 h-4 text-white" />
         </div>
       )}
@@ -48,14 +48,14 @@ function MessageBubble({ message }) {
         <div
           className={`rounded-2xl px-4 py-3 ${
             isUser
-              ? 'bg-primary-600/20 border border-primary-500/20 text-white'
-              : 'bg-dark-100/60 border border-white/[0.04] text-zinc-200'
+              ? 'bg-blue-600 text-white dark:bg-primary-600/20 dark:border dark:border-primary-500/20 shadow-sm dark:shadow-none'
+              : 'bg-white dark:bg-dark-100/60 border border-slate-200 dark:border-white/[0.04] text-slate-700 dark:text-zinc-200 shadow-sm dark:shadow-none'
           }`}
         >
           {isUser ? (
             <p className="text-sm">{message.content}</p>
           ) : (
-            <div className="prose prose-sm prose-invert max-w-none text-sm [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&>pre]:bg-dark-300 [&>pre]:rounded-xl [&>pre]:border [&>pre]:border-white/[0.05]">
+            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-sm [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&>pre]:bg-slate-50 dark:[&>pre]:bg-dark-300 [&>pre]:rounded-xl [&>pre]:border [&>pre]:border-slate-200 dark:[&>pre]:border-white/[0.05]">
               <ReactMarkdown>{message.content}</ReactMarkdown>
             </div>
           )}
@@ -72,8 +72,8 @@ function MessageBubble({ message }) {
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-xl bg-dark-50 border border-white/[0.06] flex items-center justify-center flex-shrink-0 mt-1">
-          <User className="w-4 h-4 text-zinc-400" />
+        <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-dark-50 border border-slate-200 dark:border-white/[0.06] flex items-center justify-center flex-shrink-0 mt-1">
+          <User className="w-4 h-4 text-slate-400 dark:text-zinc-400" />
         </div>
       )}
     </motion.div>
@@ -148,11 +148,11 @@ export default function ChatPanel({ playlistId }) {
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center mb-4 animate-float">
+            <div className="w-16 h-16 rounded-2xl bg-blue-600 dark:bg-gradient-primary flex items-center justify-center mb-4 animate-float shadow-lg shadow-blue-600/20 dark:shadow-none">
               <Sparkles className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Ask me anything</h3>
-            <p className="text-zinc-400 text-sm max-w-sm mb-6">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Ask me anything</h3>
+            <p className="text-slate-500 dark:text-zinc-400 text-sm max-w-sm mb-6">
               I've analyzed the entire playlist. Ask me about any topic, concept, or detail covered in the videos.
             </p>
             <div className="flex flex-wrap gap-2 justify-center max-w-lg">
@@ -164,7 +164,7 @@ export default function ChatPanel({ playlistId }) {
                 <button
                   key={q}
                   onClick={() => { setInput(q); inputRef.current?.focus(); }}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-primary-500/8 border border-primary-500/15 text-primary-300 hover:bg-primary-500/15 transition-all"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-primary-500/8 border border-blue-100 dark:border-primary-500/15 text-blue-700 dark:text-primary-300 hover:bg-blue-100 dark:hover:bg-primary-500/15 transition-all"
                 >
                   {q}
                 </button>
@@ -185,12 +185,12 @@ export default function ChatPanel({ playlistId }) {
             animate={{ opacity: 1 }}
             className="flex items-center gap-3"
           >
-            <div className="w-8 h-8 rounded-xl bg-gradient-primary flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 dark:bg-gradient-primary flex items-center justify-center flex-shrink-0 shadow-sm dark:shadow-none">
               <BrainCircuit className="w-4 h-4 text-white" />
             </div>
-            <div className="bg-dark-100/60 border border-white/[0.04] rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
-                <Loader2 className="w-4 h-4 animate-spin text-primary-400" />
+            <div className="bg-white dark:bg-dark-100/60 border border-slate-200 dark:border-white/[0.04] shadow-sm dark:shadow-none rounded-2xl px-4 py-3">
+              <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-zinc-400">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-primary-400" />
                 Thinking...
               </div>
             </div>
@@ -202,7 +202,7 @@ export default function ChatPanel({ playlistId }) {
 
       {/* Input */}
       <div className="flex-shrink-0 px-6 pb-6 pt-2">
-        <div className="flex items-center gap-3 bg-dark-100/60 border border-white/[0.06] rounded-2xl px-4 py-2 focus-within:border-primary-500/30 transition-colors">
+        <div className="flex items-center gap-3 bg-white dark:bg-dark-100/60 border border-slate-200 dark:border-white/[0.06] shadow-sm dark:shadow-none rounded-2xl px-4 py-2 focus-within:border-blue-300 dark:focus-within:border-primary-500/30 transition-colors">
           <input
             ref={inputRef}
             type="text"
@@ -210,13 +210,13 @@ export default function ChatPanel({ playlistId }) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Ask about the playlist content..."
-            className="flex-1 bg-transparent text-sm text-white placeholder-zinc-500 outline-none"
+            className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 outline-none"
             disabled={loading}
           />
           <button
             onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center disabled:opacity-30 hover:shadow-glow transition-all"
+            className="w-9 h-9 rounded-xl bg-blue-600 dark:bg-gradient-primary flex items-center justify-center disabled:opacity-30 hover:shadow-lg hover:shadow-blue-600/20 dark:hover:shadow-glow transition-all"
           >
             <Send className="w-4 h-4 text-white" />
           </button>

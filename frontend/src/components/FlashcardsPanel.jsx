@@ -27,22 +27,22 @@ function FlashcardView({ card, flipped, onFlip }) {
           className="absolute inset-0 glass-card p-8 flex flex-col items-center justify-center text-center"
           style={{ backfaceVisibility: 'hidden' }}
         >
-          <span className={`${difficultyClass} mb-4`}>{card.difficulty}</span>
+          <span className={`${difficultyClass} mb-4 shadow-sm dark:shadow-none`}>{card.difficulty}</span>
           {card.topic && (
-            <span className="text-xs text-zinc-500 mb-3">{card.topic}</span>
+            <span className="text-xs text-slate-500 dark:text-zinc-500 mb-3">{card.topic}</span>
           )}
-          <p className="text-white font-medium text-lg leading-relaxed">{card.question}</p>
-          <p className="text-xs text-zinc-500 mt-4">Click to reveal answer</p>
+          <p className="text-slate-900 dark:text-white font-medium text-lg leading-relaxed">{card.question}</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mt-4">Click to reveal answer</p>
         </div>
 
         {/* Back (Answer) */}
         <div
-          className="absolute inset-0 glass-card p-8 flex flex-col items-center justify-center text-center border-primary-500/20"
+          className="absolute inset-0 glass-card p-8 flex flex-col items-center justify-center text-center border-blue-200 dark:border-primary-500/20"
           style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
         >
-          <span className="text-xs text-primary-400 mb-3 font-medium">ANSWER</span>
-          <p className="text-zinc-200 text-base leading-relaxed">{card.answer}</p>
-          <p className="text-xs text-zinc-500 mt-4">Click to see question</p>
+          <span className="text-xs text-blue-600 dark:text-primary-400 mb-3 font-medium">ANSWER</span>
+          <p className="text-slate-700 dark:text-zinc-200 text-base leading-relaxed">{card.answer}</p>
+          <p className="text-xs text-slate-400 dark:text-zinc-500 mt-4">Click to see question</p>
         </div>
       </motion.div>
     </div>
@@ -103,7 +103,7 @@ export default function FlashcardsPanel({ playlistId }) {
   if (fetching) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+        <Loader2 className="w-6 h-6 text-blue-600 dark:text-primary-400 animate-spin" />
       </div>
     );
   }
@@ -111,8 +111,8 @@ export default function FlashcardsPanel({ playlistId }) {
   return (
     <div className="h-full flex flex-col">
       {/* Controls */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-white/[0.04] flex items-center justify-between">
-        <div className="text-sm text-zinc-400">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-slate-200 dark:border-white/[0.04] flex items-center justify-between">
+        <div className="text-sm text-slate-500 dark:text-zinc-400">
           {flashcards.length > 0 ? (
             <span>{currentIndex + 1} / {flashcards.length}</span>
           ) : (
@@ -124,7 +124,7 @@ export default function FlashcardsPanel({ playlistId }) {
           {flashcards.length > 0 && (
             <button
               onClick={resetCards}
-              className="text-zinc-400 hover:text-white transition-colors p-2"
+              className="text-slate-400 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors p-2"
               title="Reset"
             >
               <RotateCcw className="w-4 h-4" />
@@ -148,11 +148,11 @@ export default function FlashcardsPanel({ playlistId }) {
       <div className="flex-1 flex items-center justify-center px-6 py-6">
         {flashcards.length === 0 ? (
           <div className="text-center">
-            <div className="w-16 h-16 rounded-2xl bg-primary-500/10 flex items-center justify-center mb-4 mx-auto">
-              <Layers className="w-8 h-8 text-primary-500/50" />
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-primary-500/10 flex items-center justify-center mb-4 mx-auto border border-blue-100 dark:border-transparent">
+              <Layers className="w-8 h-8 text-blue-500 dark:text-primary-500/50" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No flashcards yet</h3>
-            <p className="text-zinc-400 text-sm max-w-sm">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No flashcards yet</h3>
+            <p className="text-slate-500 dark:text-zinc-400 text-sm max-w-sm">
               Click "Generate Flashcards" to create study cards from the playlist content.
             </p>
           </div>
@@ -179,7 +179,7 @@ export default function FlashcardsPanel({ playlistId }) {
               <button
                 onClick={goPrev}
                 disabled={currentIndex === 0}
-                className="w-10 h-10 rounded-xl bg-dark-100/60 border border-white/[0.06] flex items-center justify-center text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
+                className="w-10 h-10 rounded-xl bg-white dark:bg-dark-100/60 border border-slate-200 dark:border-white/[0.06] shadow-sm dark:shadow-none flex items-center justify-center text-slate-400 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -196,8 +196,8 @@ export default function FlashcardsPanel({ playlistId }) {
                       key={actualIndex}
                       className={`w-2 h-2 rounded-full transition-all ${
                         actualIndex === currentIndex
-                          ? 'bg-primary-400 w-6'
-                          : 'bg-zinc-600'
+                          ? 'bg-blue-600 dark:bg-primary-400 w-6'
+                          : 'bg-slate-300 dark:bg-zinc-600'
                       }`}
                     />
                   );
@@ -207,7 +207,7 @@ export default function FlashcardsPanel({ playlistId }) {
               <button
                 onClick={goNext}
                 disabled={currentIndex === flashcards.length - 1}
-                className="w-10 h-10 rounded-xl bg-dark-100/60 border border-white/[0.06] flex items-center justify-center text-zinc-400 hover:text-white disabled:opacity-30 transition-all"
+                className="w-10 h-10 rounded-xl bg-white dark:bg-dark-100/60 border border-slate-200 dark:border-white/[0.06] shadow-sm dark:shadow-none flex items-center justify-center text-slate-400 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>

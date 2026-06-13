@@ -18,14 +18,14 @@ function QuestionCard({ question, index, userAnswer, showResult, onAnswer }) {
       className="glass-card p-6"
     >
       <div className="flex items-start gap-3 mb-4">
-        <span className="w-7 h-7 rounded-lg bg-primary-500/15 flex items-center justify-center text-xs font-bold text-primary-400 flex-shrink-0">
+        <span className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-primary-500/15 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-primary-400 flex-shrink-0">
           {index + 1}
         </span>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="badge-status text-[10px]">{question.question_type?.replace('_', '/')}</span>
           </div>
-          <p className="text-white font-medium text-sm leading-relaxed">{question.question}</p>
+          <p className="text-slate-900 dark:text-white font-medium text-sm leading-relaxed">{question.question}</p>
         </div>
       </div>
 
@@ -36,13 +36,13 @@ function QuestionCard({ question, index, userAnswer, showResult, onAnswer }) {
             const isSelected = userAnswer === opt;
             const isCorrectOpt = question.correct_answer === opt;
 
-            let optClass = 'bg-dark-100/40 border border-white/[0.04] hover:border-primary-500/30 hover:bg-primary-500/5 cursor-pointer';
+            let optClass = 'bg-white dark:bg-dark-100/40 border border-slate-200 dark:border-white/[0.04] hover:border-blue-300 dark:hover:border-primary-500/30 hover:bg-blue-50 dark:hover:bg-primary-500/5 cursor-pointer shadow-sm dark:shadow-none';
             if (showResult) {
-              if (isCorrectOpt) optClass = 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300';
-              else if (isSelected && !isCorrect) optClass = 'bg-rose-500/10 border border-rose-500/30 text-rose-300';
-              else optClass = 'bg-dark-100/20 border border-white/[0.02] opacity-50';
+              if (isCorrectOpt) optClass = 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300';
+              else if (isSelected && !isCorrect) optClass = 'bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300';
+              else optClass = 'bg-slate-50 dark:bg-dark-100/20 border border-slate-200 dark:border-white/[0.02] opacity-50';
             } else if (isSelected) {
-              optClass = 'bg-primary-500/15 border border-primary-500/30 text-primary-300';
+              optClass = 'bg-blue-50 dark:bg-primary-500/15 border border-blue-200 dark:border-primary-500/30 text-blue-700 dark:text-primary-300';
             }
 
             return (
@@ -54,8 +54,8 @@ function QuestionCard({ question, index, userAnswer, showResult, onAnswer }) {
               >
                 <div className="flex items-center gap-2">
                   <span className="flex-1">{opt}</span>
-                  {showResult && isCorrectOpt && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-                  {showResult && isSelected && !isCorrect && <XCircle className="w-4 h-4 text-rose-400" />}
+                  {showResult && isCorrectOpt && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                  {showResult && isSelected && !isCorrect && <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />}
                 </div>
               </button>
             );
@@ -67,14 +67,14 @@ function QuestionCard({ question, index, userAnswer, showResult, onAnswer }) {
       {!isMcq && (
         <div className="ml-10">
           {showResult ? (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-300">
-              <span className="text-emerald-400 font-medium">Answer: </span>
+            <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300 shadow-sm dark:shadow-none">
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Answer: </span>
               {question.correct_answer}
             </div>
           ) : (
             <button
               onClick={() => onAnswer('__revealed__')}
-              className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1 transition-colors"
+              className="text-xs text-blue-600 dark:text-primary-400 hover:text-blue-700 dark:hover:text-primary-300 flex items-center gap-1 transition-colors"
             >
               <Eye className="w-3.5 h-3.5" /> Reveal Answer
             </button>
@@ -84,8 +84,8 @@ function QuestionCard({ question, index, userAnswer, showResult, onAnswer }) {
 
       {/* Explanation */}
       {showResult && question.explanation && (
-        <div className="ml-10 mt-3 bg-primary-500/5 border border-primary-500/10 rounded-xl px-4 py-3 text-xs text-zinc-400">
-          <span className="text-primary-400 font-medium">💡 Explanation: </span>
+        <div className="ml-10 mt-3 bg-blue-50 dark:bg-primary-500/5 border border-blue-100 dark:border-primary-500/10 rounded-xl px-4 py-3 text-xs text-slate-500 dark:text-zinc-400 shadow-sm dark:shadow-none">
+          <span className="text-blue-600 dark:text-primary-400 font-medium">💡 Explanation: </span>
           {question.explanation}
         </div>
       )}
@@ -150,7 +150,7 @@ export default function QuizPanel({ playlistId }) {
   if (fetching) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+        <Loader2 className="w-6 h-6 text-blue-600 dark:text-primary-400 animate-spin" />
       </div>
     );
   }
@@ -158,19 +158,19 @@ export default function QuizPanel({ playlistId }) {
   return (
     <div className="h-full flex flex-col">
       {/* Controls */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-white/[0.04] flex items-center justify-between">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-slate-200 dark:border-white/[0.04] flex items-center justify-between">
         <div className="flex items-center gap-4">
           {questions.length > 0 && !showResults && (
-            <span className="text-sm text-zinc-400">
+            <span className="text-sm text-slate-500 dark:text-zinc-400">
               {answeredCount} / {questions.length} answered
             </span>
           )}
           {showResults && (
             <div className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span className="text-sm font-medium text-white">
+              <Trophy className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+              <span className="text-sm font-medium text-slate-900 dark:text-white">
                 Score: {correctCount}/{questions.length}
-                <span className="text-zinc-400 ml-1">
+                <span className="text-slate-500 dark:text-zinc-400 ml-1">
                   ({Math.round((correctCount / questions.length) * 100)}%)
                 </span>
               </span>
@@ -217,11 +217,11 @@ export default function QuizPanel({ playlistId }) {
       <div className="flex-1 overflow-y-auto px-6 py-6">
         {questions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 rounded-2xl bg-primary-500/10 flex items-center justify-center mb-4">
-              <HelpCircle className="w-8 h-8 text-primary-500/50" />
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-primary-500/10 flex items-center justify-center mb-4 border border-blue-100 dark:border-transparent">
+              <HelpCircle className="w-8 h-8 text-blue-500 dark:text-primary-500/50" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No quiz yet</h3>
-            <p className="text-zinc-400 text-sm max-w-sm">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No quiz yet</h3>
+            <p className="text-slate-500 dark:text-zinc-400 text-sm max-w-sm">
               Click "Generate Quiz" to create AI-powered quiz questions from the playlist.
             </p>
           </div>

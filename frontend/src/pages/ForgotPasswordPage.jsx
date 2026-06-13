@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { forgotPassword, resetPassword } from '../api/client';
 import { KeyRound, Mail, ShieldCheck, AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Copy, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ThemeToggle from '../components/ThemeToggle';
 
 const STEPS = {
   EMAIL: 'email',
@@ -84,17 +85,21 @@ export default function ForgotPasswordPage() {
   const stepDirection = step === STEPS.EMAIL ? 0 : step === STEPS.VERIFY ? 1 : 2;
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#f8faff] text-slate-900 font-sans p-4 py-12">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#f8faff] dark:bg-dark-500 text-slate-900 dark:text-white font-sans p-4 py-12 transition-colors duration-300">
       {/* Back button */}
       <Link 
         to="/login" 
-        className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-2 text-slate-500 hover:text-blue-600 font-medium transition-colors z-20 group"
+        className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-2 text-slate-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-primary-400 font-medium transition-colors z-20 group"
       >
-        <div className="p-2 bg-white rounded-full shadow-sm border border-slate-200 group-hover:border-blue-200 group-hover:bg-blue-50 transition-all group-hover:scale-105">
+        <div className="p-2 bg-white dark:bg-dark-300 rounded-full shadow-sm border border-slate-200 dark:border-white/[0.08] group-hover:border-blue-200 dark:group-hover:border-primary-500/30 group-hover:bg-blue-50 dark:group-hover:bg-primary-500/10 transition-all group-hover:scale-105">
           <ArrowLeft className="w-5 h-5" />
         </div>
         <span className="hidden sm:inline">Back to Login</span>
       </Link>
+
+      <div className="absolute top-6 right-6 md:top-8 md:right-8 z-20">
+        <ThemeToggle />
+      </div>
 
       {/* Background gradients */}
       <motion.div 
@@ -111,7 +116,7 @@ export default function ForgotPasswordPage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white border border-slate-200 rounded-[2rem] p-8 md:p-10 shadow-[0_8px_40px_rgb(0,0,0,0.08)] relative z-10"
+        className="w-full max-w-md bg-white dark:bg-dark-300 border border-slate-200 dark:border-white/[0.08] rounded-[2rem] p-8 md:p-10 shadow-[0_8px_40px_rgb(0,0,0,0.08)] dark:shadow-none relative z-10"
       >
         {/* Step indicator */}
         <div className="flex items-center justify-center gap-2 mb-8">
@@ -148,13 +153,13 @@ export default function ForgotPasswordPage() {
               transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
               <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center p-3 bg-amber-50 text-amber-600 rounded-2xl mb-4 shadow-sm border border-amber-100">
+                <div className="inline-flex items-center justify-center p-3 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl mb-4 shadow-sm dark:shadow-none border border-amber-100 dark:border-amber-500/20">
                   <Mail className="w-8 h-8" />
                 </div>
-                <h1 className="text-3xl font-bold text-slate-900">
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
                   Forgot Password?
                 </h1>
-                <p className="text-slate-600 mt-2 font-medium">
+                <p className="text-slate-600 dark:text-zinc-400 mt-2 font-medium">
                   Enter your email and we'll send you a reset code.
                 </p>
               </div>
@@ -172,14 +177,14 @@ export default function ForgotPasswordPage() {
 
               <form onSubmit={handleEmailSubmit} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">Email Address</label>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">Email Address</label>
                   <input
                     id="forgot-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+                    className="input-field"
                     placeholder="you@example.com"
                   />
                 </div>
@@ -189,7 +194,7 @@ export default function ForgotPasswordPage() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3.5 px-4 font-bold transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2"
+                  className="w-full btn-primary mt-2 flex items-center justify-center gap-2"
                 >
                   {isLoading ? (
                     'Sending...'
@@ -202,9 +207,9 @@ export default function ForgotPasswordPage() {
                 </motion.button>
               </form>
 
-              <p className="mt-8 text-center text-sm text-slate-600 font-medium">
+              <p className="mt-8 text-center text-sm text-slate-600 dark:text-zinc-400 font-medium">
                 Remember your password?{' '}
-                <Link to="/login" className="text-blue-600 hover:text-blue-700 font-bold transition-colors">
+                <Link to="/login" className="text-blue-600 dark:text-primary-400 hover:text-blue-700 dark:hover:text-primary-300 font-bold transition-colors">
                   Log in
                 </Link>
               </p>
@@ -223,13 +228,13 @@ export default function ForgotPasswordPage() {
               transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
               <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center p-3 bg-blue-50 text-blue-600 rounded-2xl mb-4 shadow-sm border border-blue-100">
+                <div className="inline-flex items-center justify-center p-3 bg-blue-50 dark:bg-primary-500/10 text-blue-600 dark:text-primary-400 rounded-2xl mb-4 shadow-sm dark:shadow-none border border-blue-100 dark:border-primary-500/20">
                   <KeyRound className="w-8 h-8" />
                 </div>
-                <h1 className="text-3xl font-bold text-slate-900">
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
                   Reset Password
                 </h1>
-                <p className="text-slate-600 mt-2 font-medium">
+                <p className="text-slate-600 dark:text-zinc-400 mt-2 font-medium">
                   Enter the 6-digit code and your new password.
                 </p>
               </div>
@@ -277,7 +282,7 @@ export default function ForgotPasswordPage() {
 
               <form onSubmit={handleResetSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">Reset Code</label>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">Reset Code</label>
                   <input
                     id="reset-otp"
                     type="text"
@@ -289,13 +294,13 @@ export default function ForgotPasswordPage() {
                     }}
                     required
                     maxLength={6}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm text-center text-lg tracking-[0.3em] font-mono font-bold"
+                    className="input-field text-center text-lg tracking-[0.3em] font-mono font-bold"
                     placeholder="000000"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">New Password</label>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">New Password</label>
                   <div className="relative">
                     <input
                       id="reset-new-password"
@@ -304,7 +309,7 @@ export default function ForgotPasswordPage() {
                       onChange={(e) => setNewPassword(e.target.value)}
                       required
                       minLength={6}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 pr-12 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+                      className="input-field pr-12"
                       placeholder="••••••••"
                     />
                     <button
@@ -318,7 +323,7 @@ export default function ForgotPasswordPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">Confirm Password</label>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">Confirm Password</label>
                   <input
                     id="reset-confirm-password"
                     type="password"
@@ -326,7 +331,7 @@ export default function ForgotPasswordPage() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     minLength={6}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+                    className="input-field"
                     placeholder="••••••••"
                   />
                 </div>
@@ -336,7 +341,7 @@ export default function ForgotPasswordPage() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={isLoading || otp.length < 6}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3.5 px-4 font-bold transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                  className="w-full btn-primary mt-2"
                 >
                   {isLoading ? 'Resetting...' : 'Reset Password'}
                 </motion.button>
@@ -344,7 +349,7 @@ export default function ForgotPasswordPage() {
 
               <button
                 onClick={() => { setStep(STEPS.EMAIL); setError(''); setDevOtp(''); setOtp(''); }}
-                className="mt-6 w-full text-center text-sm text-slate-500 hover:text-blue-600 font-medium transition-colors"
+                className="mt-6 w-full text-center text-sm text-slate-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-primary-400 font-medium transition-colors"
               >
                 ← Use a different email
               </button>
@@ -371,10 +376,10 @@ export default function ForgotPasswordPage() {
                 >
                   <ShieldCheck className="w-10 h-10" />
                 </motion.div>
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
                   Password Reset!
                 </h1>
-                <p className="text-slate-600 font-medium mb-8">
+                <p className="text-slate-600 dark:text-zinc-400 font-medium mb-8">
                   Your password has been successfully updated. You can now log in with your new password.
                 </p>
 
@@ -382,7 +387,7 @@ export default function ForgotPasswordPage() {
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3.5 px-4 font-bold transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 flex items-center justify-center gap-2"
+                    className="w-full btn-primary flex items-center justify-center gap-2"
                   >
                     Go to Login
                     <ArrowRight className="w-4 h-4" />

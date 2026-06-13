@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserPlus, AlertCircle, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -46,17 +47,21 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#f8faff] text-slate-900 font-sans p-4 py-12">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#f8faff] dark:bg-dark-500 text-slate-900 dark:text-white font-sans p-4 py-12 transition-colors duration-300">
       {/* Back button */}
       <Link 
         to="/" 
-        className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-2 text-slate-500 hover:text-blue-600 font-medium transition-colors z-20 group"
+        className="absolute top-6 left-6 md:top-8 md:left-8 flex items-center gap-2 text-slate-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-primary-400 font-medium transition-colors z-20 group"
       >
-        <div className="p-2 bg-white rounded-full shadow-sm border border-slate-200 group-hover:border-blue-200 group-hover:bg-blue-50 transition-all group-hover:scale-105">
+        <div className="p-2 bg-white dark:bg-dark-300 rounded-full shadow-sm border border-slate-200 dark:border-white/[0.08] group-hover:border-blue-200 dark:group-hover:border-primary-500/30 group-hover:bg-blue-50 dark:group-hover:bg-primary-500/10 transition-all group-hover:scale-105">
           <ArrowLeft className="w-5 h-5" />
         </div>
         <span className="hidden sm:inline">Back to Home</span>
       </Link>
+
+      <div className="absolute top-6 right-6 md:top-8 md:right-8 z-20">
+        <ThemeToggle />
+      </div>
 
       {/* Background gradients */}
       <motion.div 
@@ -73,16 +78,16 @@ export default function SignupPage() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white border border-slate-200 rounded-[2rem] p-8 md:p-10 shadow-[0_8px_40px_rgb(0,0,0,0.08)] relative z-10"
+        className="w-full max-w-md bg-white dark:bg-dark-300 border border-slate-200 dark:border-white/[0.08] rounded-[2rem] p-8 md:p-10 shadow-[0_8px_40px_rgb(0,0,0,0.08)] dark:shadow-none relative z-10"
       >
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 bg-blue-50 text-blue-600 rounded-2xl mb-4 shadow-sm border border-blue-100">
+          <div className="inline-flex items-center justify-center p-3 bg-blue-50 dark:bg-primary-500/10 text-blue-600 dark:text-primary-400 rounded-2xl mb-4 shadow-sm dark:shadow-none border border-blue-100 dark:border-primary-500/20">
             <UserPlus className="w-8 h-8" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
             Create Account
           </h1>
-          <p className="text-slate-600 mt-2 font-medium">Join Ytutor and supercharge your learning.</p>
+          <p className="text-slate-600 dark:text-zinc-400 mt-2 font-medium">Join Ytutor and supercharge your learning.</p>
         </div>
 
         {error && (
@@ -98,52 +103,52 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1.5">Email</label>
+            <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+              className="input-field"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1.5">Username</label>
+            <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">Username</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
               minLength={3}
-              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+              className="input-field"
               placeholder="johndoe"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1.5">Password</label>
+            <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+              className="input-field"
               placeholder="••••••••"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1.5">Confirm Password</label>
+            <label className="block text-sm font-bold text-slate-700 dark:text-zinc-300 mb-1.5">Confirm Password</label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
+              className="input-field"
               placeholder="••••••••"
             />
           </div>
@@ -153,15 +158,15 @@ export default function SignupPage() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3.5 px-4 font-bold transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+            className="w-full btn-primary mt-6"
           >
             {isLoading ? 'Creating account...' : 'Sign up'}
           </motion.button>
         </form>
 
-        <p className="mt-8 text-center text-sm text-slate-600 font-medium">
+        <p className="mt-8 text-center text-sm text-slate-600 dark:text-zinc-400 font-medium">
           Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:text-blue-700 font-bold transition-colors">
+          <Link to="/login" className="text-blue-600 dark:text-primary-400 hover:text-blue-700 dark:hover:text-primary-300 font-bold transition-colors">
             Log in
           </Link>
         </p>
