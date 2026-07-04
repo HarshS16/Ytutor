@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { forgotPassword, resetPassword } from '../api/client';
-import { KeyRound, Mail, ShieldCheck, AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Copy, Eye, EyeOff } from 'lucide-react';
+import { KeyRound, Mail, ShieldCheck, AlertCircle, ArrowLeft, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ThemeToggle from '../components/ThemeToggle';
 
@@ -15,13 +15,11 @@ export default function ForgotPasswordPage() {
   const [step, setStep] = useState(STEPS.EMAIL);
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
-  const [devOtp, setDevOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [otpCopied, setOtpCopied] = useState(false);
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
@@ -29,11 +27,7 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-      const data = await forgotPassword(email);
-      // In dev mode, the OTP is returned in the response
-      if (data.otp) {
-        setDevOtp(data.otp);
-      }
+      await forgotPassword(email);
       setStep(STEPS.VERIFY);
     } catch (err) {
       console.error(err);
@@ -68,12 +62,6 @@ export default function ForgotPasswordPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const copyOtp = () => {
-    navigator.clipboard.writeText(devOtp);
-    setOtpCopied(true);
-    setTimeout(() => setOtpCopied(false), 2000);
   };
 
   const slideVariants = {
@@ -239,36 +227,6 @@ export default function ForgotPasswordPage() {
                 </p>
               </div>
 
-              {/* Dev mode OTP display */}
-              {devOtp && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl"
-                >
-                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2">
-                    🔧 Dev Mode — Your Reset Code
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-mono font-bold text-amber-900 tracking-[0.3em]">
-                      {devOtp}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={copyOtp}
-                      className="p-2 hover:bg-amber-100 rounded-lg transition-colors"
-                      title="Copy code"
-                    >
-                      {otpCopied ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      ) : (
-                        <Copy className="w-5 h-5 text-amber-600" />
-                      )}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
               {error && (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -348,7 +306,7 @@ export default function ForgotPasswordPage() {
               </form>
 
               <button
-                onClick={() => { setStep(STEPS.EMAIL); setError(''); setDevOtp(''); setOtp(''); }}
+                onClick={() => { setStep(STEPS.EMAIL); setError(''); setOtp(''); }}
                 className="mt-6 w-full text-center text-sm text-slate-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-primary-400 font-medium transition-colors"
               >
                 ← Use a different email

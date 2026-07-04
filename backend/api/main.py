@@ -176,6 +176,31 @@ async def startup_event():
     await init_db()
     logger.info("Database initialized")
 
+    # Reset any stuck playlists and videos to error
+    from db.database import async_session
+    from sqlalchemy import update
+    from db.models import Playlist, Video
+    
+    async with async_session() as db:
+        try:
+            stmt_p = (
+                update(Playlist)
+                .where(Playlist.status.in_(["processing", "extracting"]))
+                .values(status="error", error_message="Server restarted during processing")
+            )
+            await db.execute(stmt_p)
+            
+            stmt_v = (
+                update(Video)
+                .where(Video.status.in_(["processing", "extracting"]))
+                .values(status="error")
+            )
+            await db.execute(stmt_v)
+            await db.commit()
+            logger.info("Reset stuck processing states from previous runs.")
+        except Exception as e:
+            logger.error(f"Failed to reset stuck states: {e}")
+
     # Check FFmpeg + Node.js prerequisites
     from ingestion.audio_downloader import check_prerequisites
     _prerequisites = await asyncio.to_thread(check_prerequisites)

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ThemeToggle from '../components/ThemeToggle';
@@ -22,15 +21,6 @@ const staggerContainer = {
     transition: {
       staggerChildren: 0.15,
     },
-  },
-};
-
-const scaleIn = {
-  hidden: { opacity: 0, scale: 0.9 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
   },
 };
 
@@ -344,7 +334,7 @@ export default function LandingPage() {
             </div>
             
             <p className="text-slate-600 dark:text-zinc-300 mb-8 font-medium bg-blue-50 dark:bg-primary-500/10 py-3 px-4 rounded-xl text-sm leading-relaxed">
-              It's free for you forever! 🎀 <br className="hidden md:block"/> Because learning should be accessible to everyone.
+              It's free for you forever! <br className="hidden md:block"/> Because learning should be accessible to everyone.
             </p>
 
             <ul className="text-left space-y-4 mb-10">
@@ -446,7 +436,7 @@ export default function LandingPage() {
             className="flex flex-col items-center md:items-start gap-1 cursor-pointer group"
           >
             <span className="text-blue-600 dark:text-primary-400 font-bold text-lg group-hover:text-blue-700 dark:group-hover:text-primary-300 transition-colors">Ytutor AI</span>
-            <span className="text-slate-500 dark:text-zinc-500 text-xs">© 2024 Ytutor AI. All rights reserved.</span>
+            <span className="text-slate-500 dark:text-zinc-500 text-xs">(c) 2024 Ytutor AI. All rights reserved.</span>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, x: 20 }}

@@ -57,21 +57,28 @@ export default function FlashcardsPanel({ playlistId }) {
   const [flipped, setFlipped] = useState(false);
 
   useEffect(() => {
+    const fetchCards = async () => {
+      try {
+        const data = await getFlashcards(playlistId);
+        setFlashcards(data.flashcards || []);
+      } catch {
+        // no cards
+      } finally {
+        setFetching(false);
+      }
+    };
+
     fetchCards();
   }, [playlistId]);
 
-  const fetchCards = async () => {
-    try {
-      const data = await getFlashcards(playlistId);
-      setFlashcards(data.flashcards || []);
-    } catch {
-      // no cards
-    } finally {
-      setFetching(false);
-    }
-  };
-
   const handleGenerate = async () => {
+    if (
+      flashcards.length > 0 &&
+      !window.confirm('Regenerating flashcards will replace the current flashcards for this playlist. Continue?')
+    ) {
+      return;
+    }
+
     setLoading(true);
     try {
       const data = await generateFlashcards(playlistId, 15);

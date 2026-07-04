@@ -3,6 +3,7 @@ Auth router — handles user registration, login, and password reset.
 """
 
 import logging
+import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,10 +24,14 @@ from api.auth import (
 )
 from db.database import get_db
 from db import crud
+from api.services.email_sender import send_password_reset_otp
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+ALLOW_DEV_RESET_OTP = os.getenv("ALLOW_DEV_RESET_OTP", "false").lower() == "true"
 
 
 @router.post("/signup", response_model=UserResponse)
@@ -105,12 +110,14 @@ async def forgot_password(
 
     if user:
         otp = generate_reset_otp(request.email)
-        logger.info(f"Password reset OTP generated for {request.email}: {otp}")
-        # In dev mode, return the OTP directly.
-        # In production, send via email and remove otp from response.
+        delivered = send_password_reset_otp(request.email, otp)
+        if not delivered:
+            logger.warning("Password reset OTP generated but not delivered for %s", request.email)
+
+        response_otp = otp if APP_ENV == "development" and ALLOW_DEV_RESET_OTP else None
         return ForgotPasswordResponse(
             message="If an account with that email exists, a reset code has been sent.",
-            otp=otp,
+            otp=response_otp,
         )
 
     # Email doesn't exist — still return success (prevent enumeration)
@@ -151,4 +158,3 @@ async def reset_password(
 
     logger.info(f"Password successfully reset for {request.email}")
     return ResetPasswordResponse(message="Password has been reset successfully. You can now log in.")
-

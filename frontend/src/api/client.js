@@ -99,6 +99,70 @@ export async function chatQuery(playlistId, message) {
   return res.data;
 }
 
+export async function chatQueryStream(playlistId, message, handlers = {}) {
+  const token = localStorage.getItem('ytutor_token');
+  const response = await fetch(`${API_BASE}/api/chat/query/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      playlist_id: playlistId,
+      message,
+    }),
+    signal: handlers.signal,
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Stream request failed with status ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const processEvent = (eventText) => {
+    const dataLines = eventText
+      .split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trim());
+
+    if (dataLines.length === 0) return;
+
+    const payload = JSON.parse(dataLines.join('\n'));
+    if (payload.error) {
+      handlers.onError?.(payload.error);
+      throw new Error(payload.error);
+    }
+    if (payload.token) {
+      handlers.onToken?.(payload.token);
+    }
+    if (payload.done) {
+      handlers.onDone?.({
+        sources: payload.sources || [],
+        foundContext: payload.found_context ?? false,
+      });
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() || '';
+
+    for (const eventText of events) {
+      if (eventText.trim()) processEvent(eventText);
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) processEvent(buffer);
+}
+
 export async function getChatHistory(playlistId) {
   const res = await api.get(`/api/chat/history/${playlistId}`);
   return res.data;
@@ -153,7 +217,6 @@ export async function getQuiz(playlistId) {
 // ── Export APIs ────────────────────────────────────────────────────
 
 export function getExportPdfUrl(playlistId) {
-  const token = localStorage.getItem('ytutor_token');
   const url = new URL(`${API_BASE}/api/export/pdf/${playlistId}`);
   // In a real app we'd pass token via a signed URL or cookie for file downloads,
   // but for simplicity, we rely on the backend checking headers.

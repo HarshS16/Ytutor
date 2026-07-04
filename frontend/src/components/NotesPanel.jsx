@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { FileText, Loader2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { generateNotes, getNotes } from '../api/client';
 
@@ -17,21 +17,28 @@ export default function NotesPanel({ playlistId }) {
   const [selectedType, setSelectedType] = useState('detailed');
 
   useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const data = await getNotes(playlistId);
+        setNotes(data.notes || []);
+      } catch {
+        // No notes yet
+      } finally {
+        setFetching(false);
+      }
+    };
+
     fetchNotes();
   }, [playlistId]);
 
-  const fetchNotes = async () => {
-    try {
-      const data = await getNotes(playlistId);
-      setNotes(data.notes || []);
-    } catch {
-      // No notes yet
-    } finally {
-      setFetching(false);
-    }
-  };
-
   const handleGenerate = async () => {
+    if (
+      notes.length > 0 &&
+      !window.confirm('Regenerating notes will replace the current notes for this playlist. Continue?')
+    ) {
+      return;
+    }
+
     setLoading(true);
     try {
       const data = await generateNotes(playlistId, selectedType);

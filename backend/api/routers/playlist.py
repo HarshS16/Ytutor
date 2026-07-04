@@ -114,54 +114,25 @@ async def import_playlist(
             created_at=existing.created_at,
         )
 
-    # Fetch metadata from YouTube
-    try:
-        logger.info(f"Fetching metadata from YouTube for playlist {playlist_id_yt}...")
-        metadata = await asyncio.to_thread(fetch_playlist_metadata, request.playlist_url)
-        logger.info(f"[OK] Metadata fetched: '{metadata.get('title')}' with {len(metadata.get('videos', []))} videos")
-    except ValueError as e:
-        logger.warning(f"ValueError fetching playlist: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(
-            f"Failed to fetch playlist from YouTube: {type(e).__name__}: {e}",
-            exc_info=True,
-        )
-        raise HTTPException(status_code=502, detail=f"Failed to fetch playlist from YouTube: {str(e)}")
-
-    # Create new playlist record with user_id
+    # We skip fetching metadata from YouTube synchronously.
+    # Create new playlist record with user_id and default values
     playlist = await crud.create_playlist(
         db,
         playlist_url=request.playlist_url,
-        youtube_playlist_id=metadata["playlist_id"],
-        title=metadata["title"],
-        description=metadata.get("description", ""),
-        thumbnail=metadata.get("thumbnail", ""),
-        channel=metadata.get("channel", ""),
-        video_count=len(metadata["videos"]),
+        youtube_playlist_id=playlist_id_yt,
+        title="Extracting Playlist...",
+        description="",
+        thumbnail="",
+        channel="",
+        video_count=0,
         status="extracting",
         user_id=current_user.id
     )
 
-    # Create video records
-    videos_data = [
-        {
-            "playlist_id": playlist.id,
-            "video_id": v["video_id"],
-            "title": v["title"],
-            "duration": v["duration"],
-            "thumbnail": v["thumbnail"],
-            "position": v["position"],
-            "status": "pending",
-        }
-        for v in metadata["videos"]
-    ]
-    await crud.create_videos_batch(db, videos_data)
-
     # Start background processing
     background_tasks.add_task(_background_ingest, playlist.id)
 
-    logger.info(f"Playlist imported: {playlist.id} — {playlist.title} ({len(metadata['videos'])} videos)")
+    logger.info(f"Playlist import started: {playlist.id}")
 
     return PlaylistResponse(
         id=playlist.id,

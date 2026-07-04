@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   HelpCircle, Loader2, Sparkles, CheckCircle2, XCircle,
-  ChevronRight, RotateCcw, Trophy, Eye
+  RotateCcw, Trophy, Eye
 } from 'lucide-react';
 import { generateQuiz, getQuiz } from '../api/client';
 
@@ -85,7 +85,7 @@ function QuestionCard({ question, index, userAnswer, showResult, onAnswer }) {
       {/* Explanation */}
       {showResult && question.explanation && (
         <div className="ml-10 mt-3 bg-blue-50 dark:bg-primary-500/5 border border-blue-100 dark:border-primary-500/10 rounded-xl px-4 py-3 text-xs text-slate-500 dark:text-zinc-400 shadow-sm dark:shadow-none">
-          <span className="text-blue-600 dark:text-primary-400 font-medium">💡 Explanation: </span>
+          <span className="text-blue-600 dark:text-primary-400 font-medium">Explanation: </span>
           {question.explanation}
         </div>
       )}
@@ -101,21 +101,28 @@ export default function QuizPanel({ playlistId }) {
   const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
+    const fetchQuiz = async () => {
+      try {
+        const data = await getQuiz(playlistId);
+        setQuestions(data.questions || []);
+      } catch {
+        // no quiz
+      } finally {
+        setFetching(false);
+      }
+    };
+
     fetchQuiz();
   }, [playlistId]);
 
-  const fetchQuiz = async () => {
-    try {
-      const data = await getQuiz(playlistId);
-      setQuestions(data.questions || []);
-    } catch {
-      // no quiz
-    } finally {
-      setFetching(false);
-    }
-  };
-
   const handleGenerate = async () => {
+    if (
+      questions.length > 0 &&
+      !window.confirm('Regenerating the quiz will replace the current quiz questions for this playlist. Continue?')
+    ) {
+      return;
+    }
+
     setLoading(true);
     setAnswers({});
     setShowResults(false);

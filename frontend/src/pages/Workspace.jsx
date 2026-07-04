@@ -29,7 +29,7 @@ function formatDuration(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function VideoSidebar({ videos, collapsed, onToggle }) {
+function VideoSidebar({ videos, collapsed }) {
   const statusIcon = (status) => {
     switch (status) {
       case 'ready': return <CheckCircle2 className="w-3 h-3 text-emerald-400" />;
@@ -206,7 +206,6 @@ export default function Workspace() {
         <VideoSidebar
           videos={playlist.videos || []}
           collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
 
         {/* Toggle sidebar */}

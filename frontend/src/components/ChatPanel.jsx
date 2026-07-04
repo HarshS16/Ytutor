@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, BrainCircuit, User, Clock, Video, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { chatQuery, getChatHistory } from '../api/client';
+import { chatQuery, chatQueryStream, getChatHistory } from '../api/client';
 
 function SourceBadge({ source }) {
   const ts = source.timestamp_display || '';
@@ -120,23 +120,91 @@ export default function ChatPanel({ playlistId }) {
     setInput('');
     setLoading(true);
 
+    let receivedToken = false;
+    let streamCompleted = false;
+    const streamMessageId = `stream-${Date.now()}`;
+
     try {
-      const res = await chatQuery(playlistId, msg);
-      const aiMessage = {
-        role: 'assistant',
-        content: res.answer,
-        sources: res.sources || [],
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
-          sources: [],
+      await chatQueryStream(playlistId, msg, {
+        onToken: (token) => {
+          const isFirstToken = !receivedToken;
+          receivedToken = true;
+          setMessages((prev) => {
+            if (isFirstToken) {
+              return [
+                ...prev,
+                { id: streamMessageId, role: 'assistant', content: token, sources: [] },
+              ];
+            }
+
+            return prev.map((message) => (
+              message.id === streamMessageId
+                ? { ...message, content: message.content + token }
+                : message
+            ));
+          });
         },
-      ]);
+        onDone: ({ sources }) => {
+          streamCompleted = true;
+          if (!receivedToken) {
+            setMessages((prev) => [
+              ...prev,
+              { id: streamMessageId, role: 'assistant', content: '', sources: sources || [] },
+            ]);
+            return;
+          }
+
+          setMessages((prev) => prev.map((message) => (
+            message.id === streamMessageId
+              ? { ...message, sources: sources || [] }
+              : message
+          )));
+        },
+      });
+
+      if (!receivedToken && !streamCompleted) {
+        const res = await chatQuery(playlistId, msg);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: res.answer,
+            sources: res.sources || [],
+          },
+        ]);
+      }
+    } catch (err) {
+      if (!receivedToken) {
+        try {
+          const res = await chatQuery(playlistId, msg);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: res.answer,
+              sources: res.sources || [],
+            },
+          ]);
+        } catch {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: err.message || 'Sorry, something went wrong. Please try again.',
+              sources: [],
+            },
+          ]);
+        }
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: 'The response stream was interrupted. Please try again.',
+            sources: [],
+          },
+        ]);
+      }
     } finally {
       setLoading(false);
     }

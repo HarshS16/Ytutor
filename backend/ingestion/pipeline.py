@@ -136,7 +136,49 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
         videos = await crud.get_playlist_videos(db, playlist_id)
 
         if not videos:
-            await crud.update_playlist_status(db, playlist_id, "error", "No videos found")
+            # We need to fetch metadata and create videos
+            try:
+                playlist = await crud.get_playlist(db, playlist_id)
+                if not playlist:
+                    raise Exception("Playlist not found in database")
+                
+                logger.info(f"Fetching metadata from YouTube for playlist {playlist.playlist_url}...")
+                _update_progress(playlist_id, current_video_title="Fetching metadata from YouTube...")
+                
+                metadata = await asyncio.to_thread(fetch_playlist_metadata, playlist.playlist_url)
+                logger.info(f"[OK] Metadata fetched: '{metadata.get('title')}' with {len(metadata.get('videos', []))} videos")
+                
+                await crud.update_playlist_metadata(
+                    db, playlist.id,
+                    title=metadata["title"],
+                    description=metadata.get("description", ""),
+                    thumbnail=metadata.get("thumbnail", ""),
+                    channel=metadata.get("channel", ""),
+                    video_count=len(metadata["videos"]),
+                )
+                
+                videos_data = [
+                    {
+                        "playlist_id": playlist.id,
+                        "video_id": v["video_id"],
+                        "title": v["title"],
+                        "duration": v["duration"],
+                        "thumbnail": v["thumbnail"],
+                        "position": v["position"],
+                        "status": "pending",
+                    }
+                    for v in metadata["videos"]
+                ]
+                videos = await crud.create_videos_batch(db, videos_data)
+            except Exception as e:
+                logger.error(f"Failed to fetch metadata during ingestion: {e}", exc_info=True)
+                await crud.update_playlist_status(db, playlist_id, "error", f"Failed to fetch metadata: {str(e)}")
+                await asyncio.to_thread(cleanup_temp_collection, playlist_id)
+                stats["errors"].append(f"Failed to fetch metadata: {str(e)}")
+                return stats
+        
+        if not videos:
+            await crud.update_playlist_status(db, playlist_id, "error", "No videos found in playlist")
             await asyncio.to_thread(cleanup_temp_collection, playlist_id)
             return stats
 

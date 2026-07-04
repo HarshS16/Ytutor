@@ -33,7 +33,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ForgotPasswordResponse(BaseModel):
     message: str
-    otp: Optional[str] = None  # Only populated in dev mode (no email service)
+    otp: Optional[str] = None  # Only populated when explicitly enabled for local development
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, GraduationCap, Loader2, Trash2, ArrowRight,
-  Clock, Video, CheckCircle2, AlertCircle, RefreshCw,
+  Video, CheckCircle2, AlertCircle, RefreshCw,
   X, LogOut, User
 } from 'lucide-react';
 import { getPlaylists, importPlaylist, deletePlaylist, getPlaylistStatus } from '../api/client';
@@ -20,7 +20,7 @@ function ImportModal({ isOpen, onClose, onImport }) {
     setError('');
     setLoading(true);
     try {
-      const result = await onImport(url.trim());
+      await onImport(url.trim());
       setUrl('');
       onClose();
     } catch (err) {
