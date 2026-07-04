@@ -1,18 +1,8 @@
 """
-Whisper-based transcript extraction and cleaning pipeline.
+Transcript extraction and cleaning pipeline.
 
-Downloads audio via yt-dlp, then transcribes locally using OpenAI Whisper.
-Replaces the old youtube-transcript-api / yt-dlp caption fetching approach
-to eliminate YouTube transcript rate-limiting issues.
-
-Pipeline:
-1. Download audio (yt-dlp + FFmpeg)
-2. Transcribe with Whisper (local, no API)
-3. Clean transcript segments
-4. Merge short fragments into sentences
-5. Preserve timestamp mapping for chunking
-
-Performance metrics are logged for each transcription.
+Tries fast YouTube captions first, then falls back to local Whisper
+transcription when captions are unavailable.
 """
 
 import logging
@@ -30,6 +20,11 @@ logger = logging.getLogger(__name__)
 
 # ── Whisper configuration ─────────────────────────────────────────
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
+CAPTION_LANGUAGES = [
+    lang.strip()
+    for lang in os.getenv("CAPTION_LANGUAGES", "en,en-US,en-GB").split(",")
+    if lang.strip()
+]
 
 # Filler words/phrases to remove
 FILLER_PATTERNS = [
@@ -107,7 +102,6 @@ def transcribe_video(video_id: str) -> Optional[list[dict]]:
 
         transcribe_elapsed = time.time() - transcribe_start
 
-        # Extract segments in the standard format
         segments = []
         for seg in result.get("segments", []):
             text = seg.get("text", "").strip()
@@ -119,11 +113,9 @@ def transcribe_video(video_id: str) -> Optional[list[dict]]:
                 "duration": seg.get("end", 0.0) - seg.get("start", 0.0),
             })
 
-        # Log performance metrics
         full_text = result.get("text", "")
         detected_lang = result.get("language", "unknown")
 
-        # Estimate audio duration from last segment
         audio_duration = 0.0
         if segments:
             last = segments[-1]
@@ -158,6 +150,90 @@ def transcribe_video(video_id: str) -> Optional[list[dict]]:
             exc_info=True,
         )
         return None
+
+
+def fetch_caption_transcript(video_id: str) -> tuple[Optional[list[dict]], Optional[str]]:
+    """
+    Fetch YouTube captions for a video.
+
+    Returns a tuple of (segments, source), where source is "captions" for
+    manually-created captions or "auto_captions" for generated captions.
+    """
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        try:
+            from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled
+        except ImportError:
+            from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
+    except Exception as exc:
+        logger.info("youtube-transcript-api unavailable, falling back to Whisper: %s", exc)
+        return None, None
+
+    try:
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+    except (NoTranscriptFound, TranscriptsDisabled) as exc:
+        logger.info("No captions available for %s: %s", video_id, exc)
+        return None, None
+    except Exception as exc:
+        logger.warning("Caption lookup failed for %s: %s", video_id, exc)
+        return None, None
+
+    transcript = None
+    source = "captions"
+
+    try:
+        transcript = transcript_list.find_manually_created_transcript(CAPTION_LANGUAGES)
+    except Exception:
+        try:
+            transcript = transcript_list.find_generated_transcript(CAPTION_LANGUAGES)
+            source = "auto_captions"
+        except Exception:
+            try:
+                transcript = next(iter(transcript_list))
+                source = "auto_captions" if getattr(transcript, "is_generated", False) else "captions"
+            except Exception as exc:
+                logger.info("No usable captions found for %s: %s", video_id, exc)
+                return None, None
+
+    try:
+        raw_items = transcript.fetch()
+    except Exception as exc:
+        logger.warning("Caption fetch failed for %s: %s", video_id, exc)
+        return None, None
+
+    segments = []
+    for item in raw_items:
+        text = item.get("text", "").strip()
+        if not text:
+            continue
+        segments.append({
+            "text": text,
+            "start": float(item.get("start", 0.0)),
+            "duration": float(item.get("duration", 0.0)),
+        })
+
+    if not segments:
+        return None, None
+
+    logger.info("Fetched %s segments for %s via %s", len(segments), video_id, source)
+    return segments, source
+
+
+def get_transcript(video_id: str) -> tuple[Optional[list[dict]], str]:
+    """
+    Return transcript segments and the provider used.
+
+    Provider is one of: captions, auto_captions, whisper, none.
+    """
+    caption_segments, source = fetch_caption_transcript(video_id)
+    if caption_segments:
+        return caption_segments, source or "captions"
+
+    whisper_segments = transcribe_video(video_id)
+    if whisper_segments:
+        return whisper_segments, "whisper"
+
+    return None, "none"
 
 
 def _log_whisper_metrics(

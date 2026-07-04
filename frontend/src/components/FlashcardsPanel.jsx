@@ -49,7 +49,7 @@ function FlashcardView({ card, flipped, onFlip }) {
   );
 }
 
-export default function FlashcardsPanel({ playlistId }) {
+export default function FlashcardsPanel({ playlistId, isProcessing = false, readyVideos = 0, totalVideos = 0 }) {
   const [flashcards, setFlashcards] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -74,7 +74,7 @@ export default function FlashcardsPanel({ playlistId }) {
   const handleGenerate = async () => {
     if (
       flashcards.length > 0 &&
-      !window.confirm('Regenerating flashcards will replace the current flashcards for this playlist. Continue?')
+      !window.confirm('Regenerating flashcards will replace the current flashcards for this source. Continue?')
     ) {
       return;
     }
@@ -125,6 +125,11 @@ export default function FlashcardsPanel({ playlistId }) {
           ) : (
             <span>No flashcards</span>
           )}
+          {isProcessing && readyVideos > 0 && (
+            <span className="ml-3 text-xs">
+              Uses {readyVideos}/{totalVideos} ready videos so far.
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -160,7 +165,7 @@ export default function FlashcardsPanel({ playlistId }) {
             </div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No flashcards yet</h3>
             <p className="text-slate-500 dark:text-zinc-400 text-sm max-w-sm">
-              Click "Generate Flashcards" to create study cards from the playlist content.
+              Click "Generate Flashcards" to create study cards from the video content.
             </p>
           </div>
         ) : (

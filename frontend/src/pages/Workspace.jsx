@@ -6,7 +6,7 @@ import {
   GraduationCap, ArrowLeft, Video, Clock, CheckCircle2,
   AlertCircle, Loader2, ChevronRight, User, LogOut
 } from 'lucide-react';
-import { getPlaylist } from '../api/client';
+import { getPlaylist, getPlaylistStatus } from '../api/client';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ChatPanel from '../components/ChatPanel';
@@ -93,6 +93,7 @@ export default function Workspace() {
   const [activeTab, setActiveTab] = useState('chat');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -107,7 +108,47 @@ export default function Workspace() {
       }
     }
     load();
-  }, [id]);
+  }, [id, navigate]);
+
+  useEffect(() => {
+    const playlistId = playlist?.id;
+    const playlistStatus = playlist?.status;
+    if (!playlistId || !['pending', 'extracting', 'processing'].includes(playlistStatus)) return;
+
+    let active = true;
+    let timerId;
+    const startedAt = Date.now();
+
+    const poll = async () => {
+      try {
+        const [statusData, playlistData] = await Promise.all([
+          getPlaylistStatus(playlistId),
+          getPlaylist(playlistId),
+        ]);
+        if (!active) return;
+
+        setProcessingStatus(statusData);
+        setPlaylist(playlistData);
+
+        if (statusData.status === 'ready' || statusData.status === 'error') {
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to refresh processing status', err);
+        return;
+      }
+
+      const elapsed = Date.now() - startedAt;
+      timerId = setTimeout(poll, elapsed < 60000 ? 2000 : 5000);
+    };
+
+    poll();
+
+    return () => {
+      active = false;
+      clearTimeout(timerId);
+    };
+  }, [playlist?.id, playlist?.status]);
 
   const handleExportPDF = async () => {
     if (exporting) return;
@@ -142,6 +183,12 @@ export default function Workspace() {
 
   if (!playlist) return null;
 
+  const isProcessing = ['pending', 'extracting', 'processing'].includes(playlist.status);
+  const readyVideos = processingStatus?.videos_processed ?? playlist.videos?.filter((v) => v.status === 'ready').length ?? 0;
+  const failedVideos = processingStatus?.videos_failed ?? playlist.videos?.filter((v) => v.status === 'error' || v.status === 'no_transcript').length ?? 0;
+  const totalVideos = processingStatus?.videos_total || playlist.videos?.length || playlist.video_count || 0;
+  const currentPhase = processingStatus?.current_phase || 'Processing';
+
   return (
     <div className="relative z-10 h-screen flex flex-col bg-[#f8faff] dark:bg-[#0a0a0f] transition-colors duration-300">
       {/* ── Header ─────────────────────────────────────────────── */}
@@ -164,7 +211,9 @@ export default function Workspace() {
             <h1 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
               {playlist.title}
             </h1>
-            <p className="text-[10px] text-slate-500 dark:text-zinc-500">{playlist.channel} • {playlist.video_count} videos</p>
+            <p className="text-[10px] text-slate-500 dark:text-zinc-500">
+              {playlist.channel} • {playlist.video_count === 1 ? '1 video' : `${playlist.video_count} videos`}
+            </p>
           </div>
         </div>
 
@@ -235,11 +284,27 @@ export default function Workspace() {
                   {tab.label}
                 </button>
               ))}
-            </div>
           </div>
+        </div>
 
-          {/* Active Panel */}
-          <div className="flex-1 overflow-hidden">
+        {isProcessing && (
+          <div className="flex-shrink-0 mx-4 mb-2 rounded-lg border border-blue-200 dark:border-primary-500/20 bg-blue-50 dark:bg-primary-500/10 px-4 py-2 text-xs text-slate-700 dark:text-zinc-300 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="font-semibold text-blue-700 dark:text-primary-300">
+              {currentPhase}
+            </span>
+            <span>{readyVideos}/{totalVideos} ready</span>
+            {failedVideos > 0 && <span>{failedVideos} failed</span>}
+            {processingStatus?.current_video_title && (
+              <span className="truncate max-w-md">
+                Now: {processingStatus.current_video_title}
+              </span>
+            )}
+            {readyVideos > 0 && <span>You can use ready content while the rest finishes.</span>}
+          </div>
+        )}
+
+        {/* Active Panel */}
+        <div className="flex-1 overflow-hidden">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -250,9 +315,15 @@ export default function Workspace() {
                 className="h-full"
               >
                 {activeTab === 'chat' && <ChatPanel playlistId={playlist.id} />}
-                {activeTab === 'notes' && <NotesPanel playlistId={playlist.id} />}
-                {activeTab === 'flashcards' && <FlashcardsPanel playlistId={playlist.id} />}
-                {activeTab === 'quiz' && <QuizPanel playlistId={playlist.id} />}
+                {activeTab === 'notes' && (
+                  <NotesPanel playlistId={playlist.id} isProcessing={isProcessing} readyVideos={readyVideos} totalVideos={totalVideos} />
+                )}
+                {activeTab === 'flashcards' && (
+                  <FlashcardsPanel playlistId={playlist.id} isProcessing={isProcessing} readyVideos={readyVideos} totalVideos={totalVideos} />
+                )}
+                {activeTab === 'quiz' && (
+                  <QuizPanel playlistId={playlist.id} isProcessing={isProcessing} readyVideos={readyVideos} totalVideos={totalVideos} />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>

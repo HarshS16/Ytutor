@@ -1,9 +1,9 @@
 """
-YouTube playlist and video metadata extraction using yt-dlp.
+YouTube source metadata extraction using yt-dlp.
 
-Extracts playlist info (title, description, channel, thumbnail)
-and individual video metadata (title, duration, thumbnail, video_id)
-without requiring a YouTube Data API key.
+Supports full playlists and standalone videos without requiring a YouTube Data
+API key. Standalone videos are normalized into the same shape as playlists with
+a single item in the videos list.
 """
 
 import logging
@@ -33,6 +33,41 @@ def extract_playlist_id(url: str) -> Optional[str]:
         match = re.search(pattern, url)
         if match:
             return match.group(1)
+    return None
+
+
+def extract_video_id(url: str) -> Optional[str]:
+    """
+    Extract a YouTube video ID from common video URL formats.
+
+    Playlist URLs with a list= parameter are intentionally handled by
+    extract_playlist_id first by callers, so watch URLs that contain both v= and
+    list= continue to import as playlists.
+    """
+    patterns = [
+        r"(?:youtube\.com/watch\?[^#]*v=)([a-zA-Z0-9_-]{11})",
+        r"(?:youtu\.be/)([a-zA-Z0-9_-]{11})",
+        r"(?:youtube\.com/embed/)([a-zA-Z0-9_-]{11})",
+        r"(?:youtube\.com/shorts/)([a-zA-Z0-9_-]{11})",
+        r"^([a-zA-Z0-9_-]{11})$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def get_youtube_source_id(url: str) -> Optional[str]:
+    """Return a stable unique source ID for a playlist or standalone video."""
+    playlist_id = extract_playlist_id(url)
+    if playlist_id:
+        return playlist_id
+
+    video_id = extract_video_id(url)
+    if video_id:
+        return f"video:{video_id}"
+
     return None
 
 
@@ -115,3 +150,72 @@ def fetch_playlist_metadata(playlist_url: str) -> dict:
 
     logger.info(f"Extracted {len(videos)} videos from playlist '{result['title']}'")
     return result
+
+
+def fetch_video_metadata(video_url: str) -> dict:
+    """
+    Fetch metadata for a standalone YouTube video and return playlist-shaped data.
+    """
+    import yt_dlp
+
+    video_id = extract_video_id(video_url)
+    if not video_id:
+        raise ValueError(f"Invalid YouTube video URL: {video_url}")
+
+    normalized_url = f"https://www.youtube.com/watch?v={video_id}"
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "force_generic_extractor": False,
+    }
+
+    logger.info(f"Fetching video metadata: {normalized_url}")
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(normalized_url, download=False)
+        except Exception as e:
+            logger.error(f"yt-dlp error: {e}")
+            raise ValueError(f"Could not fetch video: {str(e)}")
+
+    if not info:
+        raise ValueError("Could not extract video info")
+
+    title = info.get("title", "Untitled Video")
+    thumbnail = info.get("thumbnail", "") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+    channel = info.get("uploader", info.get("channel", "Unknown"))
+
+    result = {
+        "playlist_id": f"video:{video_id}",
+        "title": title,
+        "description": info.get("description", "") or "",
+        "channel": channel,
+        "thumbnail": thumbnail,
+        "videos": [
+            {
+                "video_id": video_id,
+                "title": title,
+                "duration": info.get("duration", 0) or 0,
+                "thumbnail": thumbnail,
+                "position": 0,
+            }
+        ],
+    }
+
+    logger.info(f"Extracted standalone video '{title}'")
+    return result
+
+
+def fetch_youtube_source_metadata(source_url: str) -> dict:
+    """
+    Fetch metadata for either a YouTube playlist or standalone video.
+
+    If a URL contains both a video ID and a playlist ID, playlist import wins to
+    preserve the app's existing behavior for watch URLs with list=.
+    """
+    if extract_playlist_id(source_url):
+        return fetch_playlist_metadata(source_url)
+    if extract_video_id(source_url):
+        return fetch_video_metadata(source_url)
+    raise ValueError(f"Invalid YouTube playlist or video URL: {source_url}")

@@ -10,7 +10,7 @@ const noteTypes = [
   { id: 'revision', label: 'Revision', desc: 'Quick review format' },
 ];
 
-export default function NotesPanel({ playlistId }) {
+export default function NotesPanel({ playlistId, isProcessing = false, readyVideos = 0, totalVideos = 0 }) {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -34,7 +34,7 @@ export default function NotesPanel({ playlistId }) {
   const handleGenerate = async () => {
     if (
       notes.length > 0 &&
-      !window.confirm('Regenerating notes will replace the current notes for this playlist. Continue?')
+      !window.confirm('Regenerating notes will replace the current notes for this source. Continue?')
     ) {
       return;
     }
@@ -79,6 +79,12 @@ export default function NotesPanel({ playlistId }) {
           ))}
         </div>
 
+        {isProcessing && readyVideos > 0 && (
+          <span className="text-xs text-slate-500 dark:text-zinc-400">
+            Uses {readyVideos}/{totalVideos} ready videos so far.
+          </span>
+        )}
+
         <button
           onClick={handleGenerate}
           disabled={loading}
@@ -101,7 +107,7 @@ export default function NotesPanel({ playlistId }) {
             </div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No notes yet</h3>
             <p className="text-slate-500 dark:text-zinc-400 text-sm max-w-sm mb-4">
-              Select a note type and click "Generate Notes" to create AI-powered study notes from the playlist transcripts.
+              Select a note type and click "Generate Notes" to create AI-powered study notes from the transcript.
             </p>
           </div>
         ) : (

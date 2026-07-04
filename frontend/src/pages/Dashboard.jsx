@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -24,7 +24,7 @@ function ImportModal({ isOpen, onClose, onImport }) {
       setUrl('');
       onClose();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to import playlist. Check the URL and try again.');
+      setError(err.response?.data?.detail || 'Failed to import. Check the YouTube URL and try again.');
     } finally {
       setLoading(false);
     }
@@ -61,8 +61,8 @@ function ImportModal({ isOpen, onClose, onImport }) {
               <Plus className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Import Playlist</h2>
-              <p className="text-sm text-slate-500 dark:text-zinc-400">Paste a YouTube playlist URL</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Import YouTube Source</h2>
+              <p className="text-sm text-slate-500 dark:text-zinc-400">Paste a YouTube playlist or video URL</p>
             </div>
           </div>
 
@@ -72,7 +72,7 @@ function ImportModal({ isOpen, onClose, onImport }) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleImport()}
-              placeholder="https://www.youtube.com/playlist?list=..."
+              placeholder="https://www.youtube.com/watch?v=... or /playlist?list=..."
               className="input-field"
               autoFocus
               disabled={loading}
@@ -102,14 +102,14 @@ function ImportModal({ isOpen, onClose, onImport }) {
               ) : (
                 <>
                   <ArrowRight className="w-4 h-4" />
-                  Import Playlist
+                  Import
                 </>
               )}
             </button>
           </div>
 
           <p className="text-xs text-slate-500 dark:text-zinc-500 mt-4 text-center">
-            We'll extract all videos, fetch transcripts, and build a searchable AI knowledge base.
+            We'll transcribe the video content and build a searchable AI knowledge base.
           </p>
         </motion.div>
       </motion.div>
@@ -125,26 +125,43 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
   const isProcessing = ['pending', 'extracting', 'processing'].includes(playlist.status);
   const isReady = playlist.status === 'ready';
   const isError = playlist.status === 'error';
+  const processedCount = status?.videos_processed ?? 0;
+  const totalCount = status?.videos_total || playlist.video_count || 0;
+  const canOpen = isReady || processedCount > 0;
+  const processingLabel = status?.current_phase || 'Processing';
 
   // Poll for status while processing
   useEffect(() => {
     if (!isProcessing) return;
 
-    const interval = setInterval(async () => {
+    let active = true;
+    let timerId;
+    const startedAt = Date.now();
+
+    const poll = async () => {
       try {
         const s = await getPlaylistStatus(playlist.id);
+        if (!active) return;
         setStatus(s);
         if (s.status === 'ready' || s.status === 'error') {
-          clearInterval(interval);
           onRefresh();
+          return;
         }
       } catch {
-        clearInterval(interval);
+        return;
       }
-    }, 3000);
 
-    return () => clearInterval(interval);
-  }, [playlist.id, playlist.status]);
+      const elapsed = Date.now() - startedAt;
+      timerId = setTimeout(poll, elapsed < 60000 ? 2000 : 5000);
+    };
+
+    poll();
+
+    return () => {
+      active = false;
+      clearTimeout(timerId);
+    };
+  }, [isProcessing, onRefresh, playlist.id, playlist.status]);
 
   const handleDelete = async (e) => {
     e.stopPropagation();
@@ -165,7 +182,7 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       className="glass-card-hover group cursor-pointer overflow-hidden"
-      onClick={() => isReady && navigate(`/playlist/${playlist.id}`)}
+      onClick={() => canOpen && navigate(`/playlist/${playlist.id}`)}
     >
       {/* Thumbnail */}
       <div className="relative h-40 overflow-hidden">
@@ -186,7 +203,12 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
           <div className="absolute inset-0 bg-white/80 dark:bg-dark-400/80 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center">
               <Loader2 className="w-8 h-8 text-blue-600 dark:text-primary-400 animate-spin mx-auto mb-2" />
-              <p className="text-sm text-blue-700 dark:text-primary-300 font-medium">Processing...</p>
+              <p className="text-sm text-blue-700 dark:text-primary-300 font-medium">{processingLabel}</p>
+              {processedCount > 0 && (
+                <p className="text-xs text-slate-600 dark:text-zinc-400 mt-1">
+                  {processedCount}/{totalCount} ready - open now
+                </p>
+              )}
               {progress > 0 && (
                 <div className="w-32 h-1.5 bg-slate-200 dark:bg-dark-100 rounded-full mt-2 mx-auto overflow-hidden">
                   <div
@@ -202,7 +224,7 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
         {/* Video count badge */}
         <div className="absolute top-3 right-3 badge-status">
           <Video className="w-3 h-3 mr-1" />
-          {playlist.video_count} videos
+          {playlist.video_count === 1 ? '1 video' : `${playlist.video_count} videos`}
         </div>
 
         {/* Delete button */}
@@ -224,15 +246,19 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            {isReady && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />}
-            {isProcessing && <Loader2 className="w-3.5 h-3.5 text-blue-600 dark:text-primary-400 animate-spin" />}
-            {isError && <AlertCircle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />}
+            {isError ? (
+              <AlertCircle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+            ) : canOpen ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+            ) : isProcessing ? (
+              <Loader2 className="w-3.5 h-3.5 text-blue-600 dark:text-primary-400 animate-spin" />
+            ) : null}
             <span className={`text-xs font-medium ${isReady ? 'text-emerald-600 dark:text-emerald-400' : isError ? 'text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-primary-400'}`}>
-              {isReady ? 'Ready' : isError ? 'Error' : 'Processing'}
+              {isReady ? 'Ready' : isError ? 'Error' : canOpen ? 'Open now' : 'Processing'}
             </span>
           </div>
 
-          {isReady && (
+          {canOpen && (
             <ArrowRight className="w-4 h-4 text-slate-400 dark:text-zinc-500 group-hover:text-blue-600 dark:group-hover:text-primary-400 group-hover:translate-x-1 transition-all" />
           )}
         </div>
@@ -248,7 +274,7 @@ export default function Dashboard() {
   const [showImport, setShowImport] = useState(false);
   const { user, logout } = useAuth();
 
-  const fetchPlaylists = async () => {
+  const fetchPlaylists = useCallback(async () => {
     try {
       const data = await getPlaylists();
       setPlaylists(data.playlists || []);
@@ -257,15 +283,18 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchPlaylists();
-  }, []);
+  }, [fetchPlaylists]);
 
   const handleImport = async (url) => {
     const result = await importPlaylist(url);
     await fetchPlaylists();
+    if (result.youtube_playlist_id?.startsWith('video:')) {
+      navigate(`/playlist/${result.id}`);
+    }
     return result;
   };
 
@@ -313,7 +342,7 @@ export default function Dashboard() {
               onClick={() => setShowImport(true)}
               className="btn-primary text-sm !px-4 !py-2 md:!px-5 md:!py-2.5 flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Import Playlist</span><span className="sm:hidden">Import</span>
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Import Source</span><span className="sm:hidden">Import</span>
             </button>
           </div>
         </div>
@@ -323,11 +352,11 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Your Playlists</h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Your Sources</h1>
             <p className="text-slate-500 dark:text-zinc-400 text-sm mt-1">
               {playlists.length > 0
-                ? `${playlists.length} playlist${playlists.length > 1 ? 's' : ''} imported`
-                : 'Import a YouTube playlist to get started'}
+                ? `${playlists.length} source${playlists.length > 1 ? 's' : ''} imported`
+                : 'Import a YouTube playlist or video to get started'}
             </p>
           </div>
           <button
@@ -361,15 +390,15 @@ export default function Dashboard() {
             <div className="w-20 h-20 rounded-2xl bg-blue-50 dark:bg-primary-500/10 flex items-center justify-center mb-6 border border-blue-100 dark:border-transparent">
               <Video className="w-10 h-10 text-blue-500 dark:text-primary-500/50" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No playlists yet</h3>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No sources yet</h3>
             <p className="text-slate-500 dark:text-zinc-400 text-sm mb-6 max-w-sm text-center">
-              Import your first YouTube playlist to start learning with AI-powered tools.
+              Import your first YouTube playlist or video to start learning with AI-powered tools.
             </p>
             <button
               onClick={() => setShowImport(true)}
               className="btn-primary flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" /> Import Your First Playlist
+              <Plus className="w-4 h-4" /> Import Your First Source
             </button>
           </motion.div>
         ) : (

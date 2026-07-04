@@ -18,6 +18,7 @@ chromadb==0.5.0
 
 # YouTube
 yt-dlp>=2024.5.27
+youtube-transcript-api>=0.6.2
 
 # Whisper Transcription
 openai-whisper>=20231117

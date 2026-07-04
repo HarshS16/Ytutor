@@ -21,13 +21,14 @@ Safe ingestion:
 
 import asyncio
 import logging
+import os
 import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import crud
-from ingestion.youtube import fetch_playlist_metadata
-from ingestion.transcript import transcribe_video, process_transcript
+from ingestion.youtube import fetch_youtube_source_metadata
+from ingestion.transcript import get_transcript, process_transcript
 from ingestion.chunker import chunk_with_timestamps
 from ingestion.embedder import embed_texts
 from ingestion.vector_store import (
@@ -41,7 +42,8 @@ from ingestion.vector_store import (
 logger = logging.getLogger(__name__)
 
 # ── Rate-limit configuration ──────────────────────────────────────
-INTER_VIDEO_DELAY_SECONDS = 10     # Delay between each video's transcript fetch
+INTER_VIDEO_DELAY_SECONDS = int(os.getenv("INTER_VIDEO_DELAY_SECONDS", 10))
+CAPTION_VIDEO_DELAY_SECONDS = float(os.getenv("CAPTION_VIDEO_DELAY_SECONDS", 0))
 RATE_LIMIT_COOLDOWN_SECONDS = 60   # Cooldown after consecutive rate-limit hits
 CONSECUTIVE_FAIL_THRESHOLD = 3     # Number of consecutive failures before cooldown
 
@@ -70,6 +72,7 @@ def _update_progress(
     videos_processed: int = 0,
     videos_failed: int = 0,
     total_videos: int = 0,
+    phase: str = "",
 ) -> None:
     """Update the live progress dict for a playlist."""
     _ingestion_progress[playlist_id] = {
@@ -78,6 +81,7 @@ def _update_progress(
         "videos_processed": videos_processed,
         "videos_failed": videos_failed,
         "total_videos": total_videos,
+        "phase": phase,
     }
 
 
@@ -142,10 +146,14 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                 if not playlist:
                     raise Exception("Playlist not found in database")
                 
-                logger.info(f"Fetching metadata from YouTube for playlist {playlist.playlist_url}...")
-                _update_progress(playlist_id, current_video_title="Fetching metadata from YouTube...")
+                logger.info(f"Fetching metadata from YouTube for source {playlist.playlist_url}...")
+                _update_progress(
+                    playlist_id,
+                    current_video_title="Fetching metadata from YouTube...",
+                    phase="Fetching metadata",
+                )
                 
-                metadata = await asyncio.to_thread(fetch_playlist_metadata, playlist.playlist_url)
+                metadata = await asyncio.to_thread(fetch_youtube_source_metadata, playlist.playlist_url)
                 logger.info(f"[OK] Metadata fetched: '{metadata.get('title')}' with {len(metadata.get('videos', []))} videos")
                 
                 await crud.update_playlist_metadata(
@@ -185,9 +193,11 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
         _update_progress(
             playlist_id,
             total_videos=len(videos),
+            phase="Preparing videos",
         )
 
         # Process each video
+        previous_transcript_source = None
         for i, video in enumerate(videos):
             try:
                 logger.info(f"Processing video {video.position + 1}/{len(videos)}: {video.title}")
@@ -200,12 +210,19 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                     videos_processed=stats["videos_processed"],
                     videos_failed=stats["videos_failed"],
                     total_videos=len(videos),
+                    phase="Checking captions",
                 )
 
                 # ── Rate-limit: inter-video delay ──────────────────────
                 if i > 0:
-                    logger.debug(f"Waiting {INTER_VIDEO_DELAY_SECONDS}s before next video...")
-                    await asyncio.sleep(INTER_VIDEO_DELAY_SECONDS)
+                    delay = (
+                        CAPTION_VIDEO_DELAY_SECONDS
+                        if previous_transcript_source in ("captions", "auto_captions")
+                        else INTER_VIDEO_DELAY_SECONDS
+                    )
+                    if delay > 0:
+                        logger.debug(f"Waiting {delay}s before next video...")
+                        await asyncio.sleep(delay)
 
                 # ── Rate-limit: circuit breaker cooldown ───────────────
                 if consecutive_failures >= CONSECUTIVE_FAIL_THRESHOLD:
@@ -216,10 +233,11 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                     await asyncio.sleep(RATE_LIMIT_COOLDOWN_SECONDS)
                     consecutive_failures = 0  # Reset after cooldown
 
-                # Step 1: Download audio + transcribe with Whisper
-                raw_transcript = await asyncio.to_thread(
-                    transcribe_video, video.video_id
+                # Step 1: Get transcript via captions first, then Whisper fallback
+                raw_transcript, transcript_source = await asyncio.to_thread(
+                    get_transcript, video.video_id
                 )
+                previous_transcript_source = transcript_source
 
                 if not raw_transcript:
                     consecutive_failures += 1
@@ -230,7 +248,7 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                     await crud.update_video(
                         db, video.id,
                         status="no_transcript",
-                        error_message="Whisper transcription failed"
+                        error_message="Transcript unavailable"
                     )
                     stats["videos_failed"] += 1
                     stats["errors"].append(f"Transcription failed: {video.title}")
@@ -238,9 +256,21 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
 
                 # Success — reset consecutive failure counter
                 consecutive_failures = 0
-                logger.info(f"  [OK] Transcript fetched: {len(raw_transcript)} segments")
+                logger.info(
+                    f"  [OK] Transcript fetched via {transcript_source}: "
+                    f"{len(raw_transcript)} segments"
+                )
 
                 # Step 2: Process transcript (clean + merge)
+                _update_progress(
+                    playlist_id,
+                    current_video=i + 1,
+                    current_video_title=video.title,
+                    videos_processed=stats["videos_processed"],
+                    videos_failed=stats["videos_failed"],
+                    total_videos=len(videos),
+                    phase="Cleaning transcript",
+                )
                 processed = process_transcript(raw_transcript)
 
                 if not processed["full_text"]:
@@ -266,6 +296,15 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                 )
 
                 # Step 3: Chunk transcript with timestamps
+                _update_progress(
+                    playlist_id,
+                    current_video=i + 1,
+                    current_video_title=video.title,
+                    videos_processed=stats["videos_processed"],
+                    videos_failed=stats["videos_failed"],
+                    total_videos=len(videos),
+                    phase="Chunking transcript",
+                )
                 chunks_with_ts = chunk_with_timestamps(
                     processed["full_text"],
                     processed["segments"],
@@ -280,12 +319,30 @@ async def run_ingestion(db: AsyncSession, playlist_id: int) -> dict:
                 logger.info(f"  [OK] Chunked into {len(chunks_with_ts)} chunks")
 
                 # Step 4: Generate embeddings
+                _update_progress(
+                    playlist_id,
+                    current_video=i + 1,
+                    current_video_title=video.title,
+                    videos_processed=stats["videos_processed"],
+                    videos_failed=stats["videos_failed"],
+                    total_videos=len(videos),
+                    phase="Embedding transcript",
+                )
                 chunk_texts = [c["text"] for c in chunks_with_ts]
                 embeddings = await asyncio.to_thread(
                     embed_texts, chunk_texts, 64, False
                 )
 
                 # Step 5: Prepare metadata and upsert to TEMP ChromaDB collection
+                _update_progress(
+                    playlist_id,
+                    current_video=i + 1,
+                    current_video_title=video.title,
+                    videos_processed=stats["videos_processed"],
+                    videos_failed=stats["videos_failed"],
+                    total_videos=len(videos),
+                    phase="Saving searchable chunks",
+                )
                 metadatas = []
                 chunk_db_records = []
 
@@ -442,8 +499,10 @@ async def run_ingestion_retry(db: AsyncSession, playlist_id: int) -> dict:
         _update_progress(
             playlist_id,
             total_videos=len(retryable),
+            phase="Preparing retry",
         )
 
+        previous_transcript_source = None
         for i, video in enumerate(retryable):
             try:
                 logger.info(f"Retrying video {i + 1}/{len(retryable)}: {video.title}")
@@ -456,12 +515,19 @@ async def run_ingestion_retry(db: AsyncSession, playlist_id: int) -> dict:
                     videos_processed=stats["videos_processed"],
                     videos_failed=stats["videos_failed"],
                     total_videos=len(retryable),
+                    phase="Checking captions",
                 )
 
                 # Rate-limit: inter-video delay
                 if i > 0:
-                    logger.debug(f"Waiting {INTER_VIDEO_DELAY_SECONDS}s before next video...")
-                    await asyncio.sleep(INTER_VIDEO_DELAY_SECONDS)
+                    delay = (
+                        CAPTION_VIDEO_DELAY_SECONDS
+                        if previous_transcript_source in ("captions", "auto_captions")
+                        else INTER_VIDEO_DELAY_SECONDS
+                    )
+                    if delay > 0:
+                        logger.debug(f"Waiting {delay}s before next video...")
+                        await asyncio.sleep(delay)
 
                 # Rate-limit: circuit breaker cooldown
                 if consecutive_failures >= CONSECUTIVE_FAIL_THRESHOLD:
@@ -472,10 +538,11 @@ async def run_ingestion_retry(db: AsyncSession, playlist_id: int) -> dict:
                     await asyncio.sleep(RATE_LIMIT_COOLDOWN_SECONDS)
                     consecutive_failures = 0
 
-                # Step 1: Download audio + transcribe with Whisper
-                raw_transcript = await asyncio.to_thread(
-                    transcribe_video, video.video_id
+                # Step 1: Get transcript via captions first, then Whisper fallback
+                raw_transcript, transcript_source = await asyncio.to_thread(
+                    get_transcript, video.video_id
                 )
+                previous_transcript_source = transcript_source
 
                 if not raw_transcript:
                     consecutive_failures += 1
@@ -486,16 +553,28 @@ async def run_ingestion_retry(db: AsyncSession, playlist_id: int) -> dict:
                     await crud.update_video(
                         db, video.id,
                         status="no_transcript",
-                        error_message="Whisper transcription failed (retry)"
+                        error_message="Transcript unavailable (retry)"
                     )
                     stats["videos_failed"] += 1
                     stats["errors"].append(f"Transcription failed: {video.title}")
                     continue
 
                 consecutive_failures = 0
-                logger.info(f"  [OK] Transcript fetched: {len(raw_transcript)} segments")
+                logger.info(
+                    f"  [OK] Transcript fetched via {transcript_source}: "
+                    f"{len(raw_transcript)} segments"
+                )
 
                 # Step 2: Process transcript
+                _update_progress(
+                    playlist_id,
+                    current_video=i + 1,
+                    current_video_title=video.title,
+                    videos_processed=stats["videos_processed"],
+                    videos_failed=stats["videos_failed"],
+                    total_videos=len(retryable),
+                    phase="Cleaning transcript",
+                )
                 processed = process_transcript(raw_transcript)
 
                 if not processed["full_text"]:
@@ -515,6 +594,15 @@ async def run_ingestion_retry(db: AsyncSession, playlist_id: int) -> dict:
                 )
 
                 # Step 3: Chunk transcript
+                _update_progress(
+                    playlist_id,
+                    current_video=i + 1,
+                    current_video_title=video.title,
+                    videos_processed=stats["videos_processed"],
+                    videos_failed=stats["videos_failed"],
+                    total_videos=len(retryable),
+                    phase="Chunking transcript",
+                )
                 chunks_with_ts = chunk_with_timestamps(
                     processed["full_text"],
                     processed["segments"],
@@ -526,6 +614,15 @@ async def run_ingestion_retry(db: AsyncSession, playlist_id: int) -> dict:
                     continue
 
                 # Step 4: Generate embeddings
+                _update_progress(
+                    playlist_id,
+                    current_video=i + 1,
+                    current_video_title=video.title,
+                    videos_processed=stats["videos_processed"],
+                    videos_failed=stats["videos_failed"],
+                    total_videos=len(retryable),
+                    phase="Embedding transcript",
+                )
                 chunk_texts = [c["text"] for c in chunks_with_ts]
                 embeddings = await asyncio.to_thread(
                     embed_texts, chunk_texts, 64, False

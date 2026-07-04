@@ -20,7 +20,7 @@ from api.models.schemas import (
 )
 from db.database import get_db
 from db import crud
-from ingestion.youtube import fetch_playlist_metadata, extract_playlist_id
+from ingestion.youtube import get_youtube_source_id
 from ingestion.pipeline import run_ingestion
 from ingestion.vector_store import get_collection_stats
 from api.auth import get_current_user
@@ -55,25 +55,24 @@ async def import_playlist(
     current_user = Depends(get_current_user),
 ):
     """
-    Import a YouTube playlist.
+    Import a YouTube playlist or standalone video.
 
     1. Validates the URL
-    2. Extracts playlist metadata via yt-dlp
-    3. Creates DB records
-    4. Kicks off background processing (transcript extraction + embedding)
+    2. Creates a DB record immediately
+    3. Kicks off background processing (metadata, transcription, embedding)
     """
-    logger.info(f"[>>] Playlist import request: {request.playlist_url}")
+    logger.info(f"[>>] YouTube import request: {request.playlist_url}")
 
     # Validate URL
-    playlist_id_yt = extract_playlist_id(request.playlist_url)
-    if not playlist_id_yt:
-        logger.warning(f"Invalid playlist URL rejected: {request.playlist_url}")
-        raise HTTPException(status_code=400, detail="Invalid YouTube playlist URL")
+    source_id = get_youtube_source_id(request.playlist_url)
+    if not source_id:
+        logger.warning(f"Invalid YouTube URL rejected: {request.playlist_url}")
+        raise HTTPException(status_code=400, detail="Invalid YouTube playlist or video URL")
 
-    logger.debug(f"Extracted YouTube playlist ID: {playlist_id_yt}")
+    logger.debug(f"Extracted YouTube source ID: {source_id}")
 
     # Check if already imported
-    existing = await crud.get_playlist_by_youtube_id(db, playlist_id_yt)
+    existing = await crud.get_playlist_by_youtube_id(db, source_id)
     if existing:
         # If the playlist is ready or actively processing, just return it
         if existing.status in ("ready", "processing", "extracting"):
@@ -119,8 +118,8 @@ async def import_playlist(
     playlist = await crud.create_playlist(
         db,
         playlist_url=request.playlist_url,
-        youtube_playlist_id=playlist_id_yt,
-        title="Extracting Playlist...",
+        youtube_playlist_id=source_id,
+        title="Extracting YouTube Source...",
         description="",
         thumbnail="",
         channel="",
@@ -236,8 +235,8 @@ async def get_playlist_status(
         raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
     videos = await crud.get_playlist_videos(db, playlist_id)
-    processed = sum(1 for v in videos if v.status in ("ready", "no_transcript"))
-    failed = sum(1 for v in videos if v.status == "error")
+    processed = sum(1 for v in videos if v.status == "ready")
+    failed = sum(1 for v in videos if v.status in ("error", "no_transcript"))
     total = len(videos)
 
     # Get chunk stats
@@ -247,13 +246,14 @@ async def get_playlist_status(
     except Exception:
         total_chunks = 0
 
-    progress = (processed / total * 100) if total > 0 else 0
+    progress = ((processed + failed) / total * 100) if total > 0 else 0
 
     # Merge live progress from the pipeline (if running)
     from ingestion.pipeline import get_ingestion_progress
     live = get_ingestion_progress(playlist_id)
     current_video = live.get("current_video") if live else None
     current_video_title = live.get("current_video_title") if live else None
+    current_phase = live.get("phase") if live else None
 
     return ProcessingStatus(
         playlist_id=playlist_id,
@@ -265,6 +265,7 @@ async def get_playlist_status(
         progress_percent=round(progress, 1),
         current_video=current_video,
         current_video_title=current_video_title,
+        current_phase=current_phase,
     )
 
 
@@ -358,4 +359,3 @@ async def _background_retry(playlist_id: int):
                 exc_info=True,
             )
             await crud.update_playlist_status(db, playlist_id, "error", str(e))
-

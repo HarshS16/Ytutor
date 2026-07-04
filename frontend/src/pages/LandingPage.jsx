@@ -80,10 +80,10 @@ export default function LandingPage() {
             variants={staggerContainer}
           >
             <motion.h1 variants={fadeInUp} className="text-5xl md:text-6xl font-bold leading-[1.1] text-blue-600 dark:text-primary-400 mb-6">
-              Turn YouTube Playlists into Interactive Workspaces.
+              Turn YouTube Videos and Playlists into Interactive Workspaces.
             </motion.h1>
             <motion.p variants={fadeInUp} className="text-lg text-slate-600 dark:text-zinc-400 mb-8 max-w-lg leading-relaxed">
-              Ytutor AI uses RAG and LLMs to transform passive watching into active learning. Chat with videos, generate flashcards, and ace your exams.
+              Ytutor AI uses RAG and LLMs to transform passive watching into active learning. Chat with videos, generate flashcards, and revise faster.
             </motion.p>
 
             <motion.div variants={fadeInUp} className="relative max-w-md group">
@@ -92,7 +92,7 @@ export default function LandingPage() {
               </div>
               <input
                 type="text"
-                placeholder="Paste YouTube Playlist URL..."
+                placeholder="Paste YouTube video or playlist URL..."
                 className="w-full pl-12 pr-36 py-4 bg-white dark:bg-dark-300 border border-slate-200 dark:border-white/[0.08] rounded-xl shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-primary-500/50 focus:border-transparent text-slate-900 dark:text-white transition-all duration-300"
               />
               <motion.button
@@ -259,7 +259,7 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
-              { step: '01', title: 'Paste a Playlist', desc: 'Drop any YouTube playlist URL and we\'ll extract all videos automatically.', icon: Video },
+              { step: '01', title: 'Paste a YouTube URL', desc: 'Drop a YouTube video or playlist URL and we will prepare it for study.', icon: Video },
               { step: '02', title: 'AI Processes Content', desc: 'Transcripts are cleaned, chunked, and embedded into a searchable knowledge base.', icon: Brain },
               { step: '03', title: 'Learn Interactively', desc: 'Chat with the AI tutor, generate notes, flashcards, quizzes, and export PDFs.', icon: Sparkles },
             ].map((item, i) => (

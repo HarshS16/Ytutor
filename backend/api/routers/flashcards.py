@@ -36,9 +36,6 @@ async def generate_flashcards_endpoint(
     if playlist.user_id is not None and playlist.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to access this playlist")
 
-    if playlist.status != "ready":
-        raise HTTPException(status_code=400, detail="Playlist is not ready yet")
-
     # Get videos with transcripts
     videos = await crud.get_playlist_videos(db, request.playlist_id)
     videos_with_transcript = [v for v in videos if v.transcript_text]

@@ -47,8 +47,8 @@ class ResetPasswordResponse(BaseModel):
 # ── Playlist Schemas ──────────────────────────────────────────────
 
 class PlaylistImportRequest(BaseModel):
-    """Request to import a YouTube playlist."""
-    playlist_url: str = Field(..., description="YouTube playlist URL")
+    """Request to import a YouTube playlist or standalone video."""
+    playlist_url: str = Field(..., description="YouTube playlist or video URL")
 
 
 class VideoInfo(BaseModel):
@@ -211,3 +211,4 @@ class ProcessingStatus(BaseModel):
     progress_percent: float = 0
     current_video: Optional[int] = None
     current_video_title: Optional[str] = None
+    current_phase: Optional[str] = None

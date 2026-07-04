@@ -221,7 +221,7 @@ export default function ChatPanel({ playlistId }) {
             </div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Ask me anything</h3>
             <p className="text-slate-500 dark:text-zinc-400 text-sm max-w-sm mb-6">
-              I've analyzed the entire playlist. Ask me about any topic, concept, or detail covered in the videos.
+              I've analyzed the source. Ask me about any topic, concept, or detail covered in the video content.
             </p>
             <div className="flex flex-wrap gap-2 justify-center max-w-lg">
               {[
@@ -277,7 +277,7 @@ export default function ChatPanel({ playlistId }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Ask about the playlist content..."
+            placeholder="Ask about the video content..."
             className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 outline-none"
             disabled={loading}
           />

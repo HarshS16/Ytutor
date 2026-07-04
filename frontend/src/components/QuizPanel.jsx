@@ -93,7 +93,7 @@ function QuestionCard({ question, index, userAnswer, showResult, onAnswer }) {
   );
 }
 
-export default function QuizPanel({ playlistId }) {
+export default function QuizPanel({ playlistId, isProcessing = false, readyVideos = 0, totalVideos = 0 }) {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -118,7 +118,7 @@ export default function QuizPanel({ playlistId }) {
   const handleGenerate = async () => {
     if (
       questions.length > 0 &&
-      !window.confirm('Regenerating the quiz will replace the current quiz questions for this playlist. Continue?')
+      !window.confirm('Regenerating the quiz will replace the current quiz questions for this source. Continue?')
     ) {
       return;
     }
@@ -170,6 +170,11 @@ export default function QuizPanel({ playlistId }) {
           {questions.length > 0 && !showResults && (
             <span className="text-sm text-slate-500 dark:text-zinc-400">
               {answeredCount} / {questions.length} answered
+            </span>
+          )}
+          {isProcessing && readyVideos > 0 && (
+            <span className="text-xs text-slate-500 dark:text-zinc-400">
+              Uses {readyVideos}/{totalVideos} ready videos so far.
             </span>
           )}
           {showResults && (
@@ -229,7 +234,7 @@ export default function QuizPanel({ playlistId }) {
             </div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No quiz yet</h3>
             <p className="text-slate-500 dark:text-zinc-400 text-sm max-w-sm">
-              Click "Generate Quiz" to create AI-powered quiz questions from the playlist.
+              Click "Generate Quiz" to create AI-powered quiz questions from the video content.
             </p>
           </div>
         ) : (
