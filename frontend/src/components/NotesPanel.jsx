@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Loader2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { generateNotes, getNotes } from '../api/client';
+import { generateNotes, getNotes, getNotesJobStatus } from '../api/client';
 
 const noteTypes = [
   { id: 'concise', label: 'Concise', desc: 'Key takeaways only' },
@@ -15,37 +15,86 @@ export default function NotesPanel({ playlistId, isProcessing = false, readyVide
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [selectedType, setSelectedType] = useState('detailed');
+  const [jobId, setJobId] = useState(null);
+  const [jobStatus, setJobStatus] = useState(null);
+
+  const fetchNotes = useCallback(async () => {
+    try {
+      const data = await getNotes(playlistId);
+      setNotes(data.notes || []);
+    } catch {
+      // No notes yet
+    } finally {
+      setFetching(false);
+    }
+  }, [playlistId]);
 
   useEffect(() => {
-    const fetchNotes = async () => {
+    fetchNotes();
+  }, [fetchNotes]);
+
+  useEffect(() => {
+    if (!jobId) return;
+
+    let active = true;
+    let timerId;
+    const startedAt = Date.now();
+
+    const poll = async () => {
       try {
-        const data = await getNotes(playlistId);
-        setNotes(data.notes || []);
-      } catch {
-        // No notes yet
-      } finally {
-        setFetching(false);
+        const status = await getNotesJobStatus(jobId);
+        if (!active) return;
+
+        setJobStatus(status);
+
+        if (status.done) {
+          setLoading(false);
+          if (status.status === 'complete') {
+            await fetchNotes();
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to fetch notes job status:', err);
+        if (!active) return;
+        setLoading(false);
+        setJobStatus((prev) => ({
+          ...(prev || {}),
+          status: 'error',
+          error: 'Lost connection to the notes generation job.',
+          done: true,
+        }));
+        return;
       }
+
+      const elapsed = Date.now() - startedAt;
+      timerId = setTimeout(poll, elapsed < 60000 ? 2000 : 5000);
     };
 
-    fetchNotes();
-  }, [playlistId]);
+    poll();
+
+    return () => {
+      active = false;
+      clearTimeout(timerId);
+    };
+  }, [fetchNotes, jobId]);
 
   const handleGenerate = async () => {
     if (
       notes.length > 0 &&
-      !window.confirm('Regenerating notes will replace the current notes for this source. Continue?')
+      !window.confirm('Regenerating complete notes will replace the current notes for this source after the new notes finish. Long videos can take several minutes. Continue?')
     ) {
       return;
     }
 
     setLoading(true);
+    setJobStatus(null);
     try {
-      const data = await generateNotes(playlistId, selectedType);
-      setNotes(data.notes || []);
+      const job = await generateNotes(playlistId, selectedType);
+      setJobId(job.job_id);
+      setJobStatus(job);
     } catch (err) {
       console.error('Notes generation failed:', err);
-    } finally {
       setLoading(false);
     }
   };
@@ -97,6 +146,31 @@ export default function NotesPanel({ playlistId, isProcessing = false, readyVide
           )}
         </button>
       </div>
+
+      {jobStatus && (
+        <div className="flex-shrink-0 mx-6 mt-4 rounded-lg border border-blue-200 dark:border-primary-500/20 bg-blue-50 dark:bg-primary-500/10 px-4 py-3 text-xs text-slate-700 dark:text-zinc-300">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 dark:text-primary-300" />}
+            <span className="font-semibold text-blue-700 dark:text-primary-300">
+              {jobStatus.status === 'complete' ? 'Complete notes ready' : jobStatus.status === 'error' ? 'Notes generation failed' : 'Generating complete notes'}
+            </span>
+            <span>
+              Videos {jobStatus.videos_done}/{jobStatus.videos_total}
+            </span>
+            {jobStatus.sections_total > 0 && (
+              <span>
+                Sections {jobStatus.sections_done}/{jobStatus.sections_total}
+              </span>
+            )}
+            {jobStatus.current_section && (
+              <span className="truncate max-w-xl">{jobStatus.current_section}</span>
+            )}
+          </div>
+          {jobStatus.error && (
+            <p className="mt-1 text-rose-600 dark:text-rose-300">{jobStatus.error}</p>
+          )}
+        </div>
+      )}
 
       {/* Notes Content */}
       <div className="flex-1 overflow-y-auto px-6 py-6">

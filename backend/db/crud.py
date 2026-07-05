@@ -229,6 +229,26 @@ async def delete_playlist_notes(db: AsyncSession, playlist_id: int) -> None:
     await db.commit()
 
 
+async def replace_playlist_notes(db: AsyncSession, playlist_id: int, notes_data: list[dict]) -> list[Note]:
+    """Replace playlist notes in one commit after generation succeeds."""
+    result = await db.execute(
+        select(Note).where(Note.playlist_id == playlist_id)
+    )
+    old_notes = result.scalars().all()
+    for note in old_notes:
+        await db.delete(note)
+
+    notes = [Note(**data) for data in notes_data]
+    db.add_all(notes)
+    await db.commit()
+
+    for note in notes:
+        await db.refresh(note)
+
+    logger.info(f"Replaced notes for playlist {playlist_id}: {len(notes)} notes")
+    return notes
+
+
 # ── Flashcard CRUD ────────────────────────────────────────────────
 
 async def create_flashcards_batch(db: AsyncSession, flashcards_data: list[dict]) -> list[Flashcard]:

@@ -6,6 +6,8 @@ Endpoints:
 """
 
 import logging
+import re
+from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,24 @@ from generators.pdf_export import generate_pdf
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["export"])
+
+
+def _download_filename(title: str) -> str:
+    """Build an HTTP-header-safe PDF download filename."""
+    safe_title = re.sub(r"[^A-Za-z0-9._-]+", "_", title or "export").strip("._-")
+    safe_title = safe_title[:50] or "export"
+    return f"ytutor_{safe_title}.pdf"
+
+
+def _content_disposition(filename: str) -> str:
+    """
+    Return an ASCII-only Content-Disposition header.
+
+    Starlette encodes header values as latin-1, so non-ASCII filenames need
+    the RFC 5987 filename* form instead of raw Unicode in filename.
+    """
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"ytutor_export.pdf\"; filename*=UTF-8''{encoded}"
 
 
 @router.get("/export/pdf/{playlist_id}")
@@ -80,12 +100,12 @@ async def export_pdf(
         quizzes=quizzes_data,
     )
 
-    filename = f"ytutor_{playlist.title[:50].replace(' ', '_')}.pdf"
+    filename = _download_filename(playlist.title)
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": _content_disposition(filename),
         },
     )

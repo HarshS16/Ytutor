@@ -179,6 +179,11 @@ export async function generateNotes(playlistId, noteType = 'detailed', videoId =
   return res.data;
 }
 
+export async function getNotesJobStatus(jobId) {
+  const res = await api.get(`/api/notes/status/${jobId}`);
+  return res.data;
+}
+
 export async function getNotes(playlistId) {
   const res = await api.get(`/api/notes/${playlistId}`);
   return res.data;

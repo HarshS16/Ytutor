@@ -129,6 +129,60 @@ def build_notes_prompt(transcript: str, video_title: str, note_type: str = "deta
     }
 
 
+def build_notes_section_prompt(
+    section_text: str,
+    video_title: str,
+    note_type: str,
+    section_index: int,
+    section_total: int,
+    timestamp_range: str,
+) -> dict:
+    """Build a prompt for exhaustive notes from one transcript section."""
+    type_instructions = {
+        "concise": "Write compact but complete notes for this section. Cover every distinct topic, but keep wording tight.",
+        "detailed": "Write comprehensive notes with full explanations, examples, sub-topics, definitions, processes, caveats, formulas, and named concepts.",
+        "revision": "Write complete revision notes with key terms, definitions, formulas, facts, and exam-ready bullet points.",
+    }
+    instruction = type_instructions.get(note_type, type_instructions["detailed"])
+
+    system_prompt = f"""You are an expert note-taker creating complete study notes from one timestamped transcript section.
+
+## Video
+"{video_title}"
+
+## Section
+Section {section_index} of {section_total}, timestamp range {timestamp_range}
+
+## Instructions
+- {instruction}
+- Preserve the order of ideas from the transcript section.
+- Do not summarize away minor topics; include every distinct concept, example, definition, process, caveat, formula, named entity, and decision mentioned.
+- If repeated content appears because of transcript overlap, keep the clearest version and avoid duplicate bullets.
+- If the transcript is unclear, mark it as unclear instead of inventing facts.
+- ALWAYS write notes in English, even if the transcript is in another language.
+- Use markdown with a `## {timestamp_range}` heading, nested bullets, and bold key terms.
+- Do not add a final overall summary; this is only one section of a larger note."""
+
+    return {
+        "system_prompt": system_prompt,
+        "user_message": f"Create {note_type} notes for this complete transcript section:\n\n{section_text}",
+    }
+
+
+def build_notes_takeaways_prompt(section_summaries: str, video_title: str, note_type: str) -> dict:
+    """Build a prompt for final takeaways from section-level summaries only."""
+    system_prompt = f"""You are an expert educator creating final takeaways for a study note.
+
+Use only the provided section headings and summaries from "{video_title}".
+Do not introduce new facts. Keep the output concise and useful for review.
+Return markdown under the heading `## Key Takeaways`."""
+
+    return {
+        "system_prompt": system_prompt,
+        "user_message": f"Create final {note_type} key takeaways from these section summaries:\n\n{section_summaries}",
+    }
+
+
 def build_flashcards_prompt(transcript: str, video_title: str, count: int = 10) -> dict:
     """Build a prompt for generating flashcards from a transcript."""
     system_prompt = f"""You are an expert educator creating flashcards for students studying video content.

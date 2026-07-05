@@ -141,6 +141,27 @@ class NotesListResponse(BaseModel):
     total: int
 
 
+class NotesGenerateJobResponse(BaseModel):
+    """Response returned after starting a background notes job."""
+    job_id: str
+    status: str
+    playlist_id: int
+    note_type: str
+    videos_total: int = 0
+    videos_done: int = 0
+    sections_total: int = 0
+    sections_done: int = 0
+    current_video_title: Optional[str] = None
+    current_section: Optional[str] = None
+    error: Optional[str] = None
+    done: bool = False
+
+
+class NotesJobStatusResponse(NotesGenerateJobResponse):
+    """Current progress for a background notes generation job."""
+    pass
+
+
 # ── Flashcard Schemas ─────────────────────────────────────────────
 
 class FlashcardGenerateRequest(BaseModel):

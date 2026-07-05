@@ -29,6 +29,14 @@ function formatDuration(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function pdfFilename(title) {
+  const safeTitle = (title || 'export')
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 50) || 'export';
+  return `ytutor_${safeTitle}.pdf`;
+}
+
 function VideoSidebar({ videos, collapsed }) {
   const statusIcon = (status) => {
     switch (status) {
@@ -161,7 +169,7 @@ export default function Workspace() {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `ytutor_${playlist.title.substring(0, 50).replace(/ /g, '_')}.pdf`);
+      link.setAttribute('download', pdfFilename(playlist.title));
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
