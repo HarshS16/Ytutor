@@ -20,7 +20,7 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <Router>
-          <div className="min-h-screen bg-[#f8faff] dark:bg-[#0a0a0f] grid-bg relative transition-colors duration-300">
+          <div className="min-h-screen bg-[#f7f9fe] dark:bg-[#080b12] grid-bg relative transition-colors duration-300">
             <div className="noise-overlay" />
             <Routes>
             <Route path="/" element={<LandingPage />} />

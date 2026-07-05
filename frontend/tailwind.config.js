@@ -47,8 +47,8 @@ export default {
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-primary': 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-        'gradient-glow': 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(59,130,246,0.15))',
+        'gradient-primary': 'linear-gradient(135deg, #2563eb, #ec4899)',
+        'gradient-glow': 'linear-gradient(135deg, rgba(37,99,235,0.14), rgba(236,72,153,0.12))',
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -81,9 +81,9 @@ export default {
         },
       },
       boxShadow: {
-        'glow': '0 0 20px rgba(139, 92, 246, 0.3)',
-        'glow-lg': '0 0 40px rgba(139, 92, 246, 0.4)',
-        'inner-glow': 'inset 0 0 20px rgba(139, 92, 246, 0.1)',
+        'glow': '0 0 20px rgba(37, 99, 235, 0.24)',
+        'glow-lg': '0 0 40px rgba(236, 72, 153, 0.22)',
+        'inner-glow': 'inset 0 0 20px rgba(37, 99, 235, 0.1)',
       },
     },
   },

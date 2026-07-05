@@ -40,19 +40,19 @@ function pdfFilename(title) {
 function VideoSidebar({ videos, collapsed }) {
   const statusIcon = (status) => {
     switch (status) {
-      case 'ready': return <CheckCircle2 className="w-3 h-3 text-emerald-400" />;
-      case 'processing': return <Loader2 className="w-3 h-3 text-primary-400 animate-spin" />;
-      case 'error': return <AlertCircle className="w-3 h-3 text-rose-400" />;
-      case 'no_transcript': return <AlertCircle className="w-3 h-3 text-amber-400" />;
-      default: return <Clock className="w-3 h-3 text-zinc-500" />;
+      case 'ready': return <CheckCircle2 className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />;
+      case 'processing': return <Loader2 className="h-3 w-3 animate-spin text-blue-600 dark:text-blue-300" />;
+      case 'error': return <AlertCircle className="h-3 w-3 text-pink-600 dark:text-pink-300" />;
+      case 'no_transcript': return <AlertCircle className="h-3 w-3 text-amber-500 dark:text-amber-300" />;
+      default: return <Clock className="h-3 w-3 text-slate-400 dark:text-slate-500" />;
     }
   };
 
   return (
-    <div className={`${collapsed ? 'w-0 overflow-hidden' : 'w-72'} transition-all duration-300 border-r border-slate-200 dark:border-white/[0.04] flex flex-col bg-slate-50 dark:bg-dark-300/30`}>
-      <div className="p-4 border-b border-slate-200 dark:border-white/[0.04] flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-2">
-          <Video className="w-4 h-4 text-blue-600 dark:text-primary-400" />
+    <div className={`${collapsed ? 'w-0 overflow-hidden' : 'w-72'} flex flex-col border-r border-slate-200/80 bg-white/65 transition-all duration-300 dark:border-white/[0.06] dark:bg-[#0b111d]/70`}>
+      <div className="flex items-center justify-between border-b border-slate-200/80 p-4 dark:border-white/[0.06]">
+        <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-200">
+          <Video className="h-4 w-4 text-blue-600 dark:text-blue-300" />
           Videos ({videos.length})
         </h3>
       </div>
@@ -61,28 +61,28 @@ function VideoSidebar({ videos, collapsed }) {
         {videos.map((video, idx) => (
           <div
             key={video.id}
-            className="flex items-start gap-3 p-3 hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors border-b border-slate-200/50 dark:border-white/[0.02] cursor-default"
+            className="flex cursor-default items-start gap-3 border-b border-slate-200/60 p-3 transition-colors hover:bg-blue-50/60 dark:border-white/[0.04] dark:hover:bg-blue-500/5"
           >
-            <div className="relative flex-shrink-0 w-20 h-12 rounded-lg overflow-hidden bg-slate-200 dark:bg-dark-50">
+            <div className="relative h-12 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200/70 dark:bg-white/[0.04] dark:ring-white/[0.06]">
               {video.thumbnail ? (
-                <img src={video.thumbnail} alt="" className="w-full h-full object-cover" />
+                <img src={video.thumbnail} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Video className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
+                <div className="flex h-full w-full items-center justify-center">
+                  <Video className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                 </div>
               )}
-              <div className="absolute bottom-0.5 right-0.5 bg-black/80 text-[10px] text-zinc-300 px-1 rounded">
+              <div className="absolute bottom-1 right-1 rounded bg-slate-950/80 px-1 text-[10px] text-white">
                 {formatDuration(video.duration)}
               </div>
             </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-700 dark:text-zinc-300 line-clamp-2 font-medium leading-relaxed">
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-2 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
                 {idx + 1}. {video.title}
               </p>
-              <div className="flex items-center gap-1 mt-1">
+              <div className="mt-1 flex items-center gap-1">
                 {statusIcon(video.status)}
-                <span className="text-[10px] text-slate-500 dark:text-zinc-500">{video.status}</span>
+                <span className="text-[10px] font-medium capitalize text-slate-500 dark:text-slate-400">{video.status}</span>
               </div>
             </div>
           </div>
@@ -163,9 +163,9 @@ export default function Workspace() {
     setExporting(true);
     try {
       const response = await api.get(`/api/export/pdf/${playlist.id}`, {
-        responseType: 'blob', // Important: tell axios to expect a binary file
+        responseType: 'blob',
       });
-      
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -174,8 +174,8 @@ export default function Workspace() {
       link.click();
       link.parentNode.removeChild(link);
     } catch (err) {
-      console.error("Failed to export PDF", err);
-      alert("Failed to export PDF. Have you generated notes, flashcards, or quizzes yet?");
+      console.error('Failed to export PDF', err);
+      alert('Failed to export PDF. Have you generated notes, flashcards, or quizzes yet?');
     } finally {
       setExporting(false);
     }
@@ -183,8 +183,8 @@ export default function Workspace() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-300" />
       </div>
     );
   }
@@ -198,50 +198,43 @@ export default function Workspace() {
   const currentPhase = processingStatus?.current_phase || 'Processing';
 
   return (
-    <div className="relative z-10 h-screen flex flex-col bg-[#f8faff] dark:bg-[#0a0a0f] transition-colors duration-300">
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="flex-shrink-0 h-14 border-b border-slate-200 dark:border-white/[0.04] bg-white/50 dark:bg-dark-300/50 backdrop-blur-xl flex items-center px-4 gap-4">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="flex items-center gap-1.5 text-slate-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-white transition-colors text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" />
+    <div className="relative z-10 flex h-screen flex-col bg-[#f7f9fe] transition-colors duration-300 dark:bg-[#080b12]">
+      <header className="flex h-16 flex-shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[#080b12]/85">
+        <button onClick={() => navigate('/dashboard')} className="btn-ghost gap-1.5 !px-2.5">
+          <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Back</span>
         </button>
 
-        <div className="w-px h-6 bg-slate-200 dark:bg-white/[0.06]" />
+        <div className="h-7 w-px bg-slate-200 dark:bg-white/[0.08]" />
 
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 dark:bg-gradient-primary flex items-center justify-center flex-shrink-0 shadow-sm dark:shadow-none">
-            <GraduationCap className="w-4 h-4 text-white" />
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:bg-gradient-primary dark:shadow-none">
+            <GraduationCap className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-              {playlist.title}
-            </h1>
-            <p className="text-[10px] text-slate-500 dark:text-zinc-500">
-              {playlist.channel} • {playlist.video_count === 1 ? '1 video' : `${playlist.video_count} videos`}
+            <h1 className="truncate text-sm font-black text-slate-950 dark:text-white">{playlist.title}</h1>
+            <p className="truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
+              {playlist.channel} - {playlist.video_count === 1 ? '1 video' : `${playlist.video_count} videos`}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-3">
           <ThemeToggle />
-
           <button
             onClick={handleExportPDF}
             disabled={exporting}
-            className="btn-secondary !px-3 !py-1.5 text-xs flex items-center gap-1.5 disabled:opacity-50"
+            className="btn-secondary flex items-center gap-1.5 !px-3 !py-2 text-xs disabled:opacity-50"
           >
-            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             PDF
           </button>
 
-          <div className="w-px h-6 bg-slate-200 dark:bg-white/[0.08]" />
+          <div className="hidden h-7 w-px bg-slate-200 dark:bg-white/[0.08] sm:block" />
 
-          <div className="hidden sm:flex items-center gap-2 text-slate-500 dark:text-zinc-400">
-            <User className="w-4 h-4" />
-            <span className="text-sm font-medium">{user?.username}</span>
+          <div className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-600 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 sm:flex">
+            <User className="h-4 w-4" />
+            <span className="text-sm font-semibold">{user?.username}</span>
           </div>
 
           <button
@@ -249,70 +242,53 @@ export default function Workspace() {
               logout();
               navigate('/login');
             }}
-            className="p-1.5 text-slate-400 dark:text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+            className="icon-button hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700 dark:hover:border-pink-400/30 dark:hover:bg-pink-500/10 dark:hover:text-pink-300"
             title="Log out"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
       </header>
 
-      {/* ── Main Content ───────────────────────────────────────── */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Video Sidebar */}
-        <VideoSidebar
-          videos={playlist.videos || []}
-          collapsed={sidebarCollapsed}
-        />
+      <div className="flex flex-1 overflow-hidden">
+        <VideoSidebar videos={playlist.videos || []} collapsed={sidebarCollapsed} />
 
-        {/* Toggle sidebar */}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="flex-shrink-0 w-5 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/[0.02] transition-colors text-slate-400 dark:text-zinc-600 hover:text-slate-600 dark:hover:text-zinc-400"
+          className="flex w-6 flex-shrink-0 items-center justify-center border-r border-slate-200/70 bg-white/60 text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:border-white/[0.06] dark:bg-[#0b111d]/60 dark:text-slate-500 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
         >
-          <ChevronRight className={`w-3 h-3 transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`} />
+          <ChevronRight className={`h-3.5 w-3.5 transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`} />
         </button>
 
-        {/* Panel Area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Tab Bar */}
-          <div className="flex-shrink-0 border-b border-slate-200 dark:border-white/[0.04] bg-slate-100/50 dark:bg-dark-300/20">
-            <div className="flex items-center gap-1 px-4 py-2">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex-shrink-0 border-b border-slate-200/80 bg-white/70 px-4 py-2 dark:border-white/[0.06] dark:bg-[#0b111d]/70">
+            <div className="segmented-control flex max-w-full flex-wrap gap-1">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    activeTab === tab.id
-                      ? 'bg-blue-100 dark:bg-primary-500/15 text-blue-700 dark:text-primary-300 border border-blue-200 dark:border-primary-500/20 shadow-sm dark:shadow-none'
-                      : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 hover:bg-white dark:hover:bg-white/[0.03]'
-                  }`}
+                  className={`segment-button flex items-center gap-2 ${activeTab === tab.id ? 'segment-button-active' : ''}`}
                 >
-                  <tab.icon className="w-4 h-4" />
+                  <tab.icon className="h-4 w-4" />
                   {tab.label}
                 </button>
               ))}
+            </div>
           </div>
-        </div>
 
-        {isProcessing && (
-          <div className="flex-shrink-0 mx-4 mb-2 rounded-lg border border-blue-200 dark:border-primary-500/20 bg-blue-50 dark:bg-primary-500/10 px-4 py-2 text-xs text-slate-700 dark:text-zinc-300 flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span className="font-semibold text-blue-700 dark:text-primary-300">
-              {currentPhase}
-            </span>
-            <span>{readyVideos}/{totalVideos} ready</span>
-            {failedVideos > 0 && <span>{failedVideos} failed</span>}
-            {processingStatus?.current_video_title && (
-              <span className="truncate max-w-md">
-                Now: {processingStatus.current_video_title}
-              </span>
-            )}
-            {readyVideos > 0 && <span>You can use ready content while the rest finishes.</span>}
-          </div>
-        )}
+          {isProcessing && (
+            <div className="progress-banner mx-4 mt-3 flex flex-shrink-0 flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="font-bold text-blue-700 dark:text-blue-300">{currentPhase}</span>
+              <span className="font-medium">{readyVideos}/{totalVideos} ready</span>
+              {failedVideos > 0 && <span className="text-pink-700 dark:text-pink-300">{failedVideos} failed</span>}
+              {processingStatus?.current_video_title && (
+                <span className="max-w-md truncate">Now: {processingStatus.current_video_title}</span>
+              )}
+              {readyVideos > 0 && <span>You can use ready content while the rest finishes.</span>}
+            </div>
+          )}
 
-        {/* Active Panel */}
-        <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}

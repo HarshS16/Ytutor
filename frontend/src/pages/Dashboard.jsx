@@ -4,25 +4,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, GraduationCap, Loader2, Trash2, ArrowRight,
   Video, CheckCircle2, AlertCircle, RefreshCw,
-  X, LogOut, User
+  X, LogOut, User, Link2, ListVideo, PlaySquare, Sparkles
 } from 'lucide-react';
 import { getPlaylists, importPlaylist, deletePlaylist, getPlaylistStatus } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ThemeToggle from '../components/ThemeToggle';
 
-function ImportModal({ isOpen, onClose, onImport }) {
+function ImportForm({ onImport, compact = false, onDone }) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleImport = async () => {
-    if (!url.trim()) return;
+    if (!url.trim() || loading) return;
     setError('');
     setLoading(true);
     try {
       await onImport(url.trim());
       setUrl('');
-      onClose();
+      onDone?.();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to import. Check the YouTube URL and try again.');
     } finally {
@@ -30,6 +30,71 @@ function ImportModal({ isOpen, onClose, onImport }) {
     }
   };
 
+  return (
+    <div className={compact ? 'space-y-4' : 'space-y-5'}>
+      <div className="flex flex-col gap-3 lg:flex-row">
+        <div className="relative flex-1">
+          <Link2 className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleImport()}
+            placeholder="Paste a YouTube video or playlist URL"
+            className="input-field pl-11"
+            autoFocus={compact}
+            disabled={loading}
+          />
+        </div>
+
+        <button
+          onClick={handleImport}
+          disabled={loading || !url.trim()}
+          className="btn-primary flex items-center justify-center gap-2 whitespace-nowrap"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Importing
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Import Source
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 font-semibold text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300">
+          <PlaySquare className="h-3.5 w-3.5" />
+          YouTube videos
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-100 bg-pink-50 px-3 py-1 font-semibold text-pink-700 dark:border-pink-400/20 dark:bg-pink-500/10 dark:text-pink-300">
+          <ListVideo className="h-3.5 w-3.5" />
+          Playlists
+        </span>
+        <span className="text-slate-500 dark:text-slate-400">
+          Captions are used first; ready videos can be opened while the rest processes.
+        </span>
+      </div>
+
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-start gap-2 rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm text-pink-700 dark:border-pink-400/20 dark:bg-pink-500/10 dark:text-pink-200"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          {error}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function ImportModal({ isOpen, onClose, onImport }) {
   if (!isOpen) return null;
 
   return (
@@ -38,82 +103,61 @@ function ImportModal({ isOpen, onClose, onImport }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
         onClick={onClose}
       >
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          initial={{ opacity: 0, scale: 0.96, y: 14 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="glass-card p-8 w-full max-w-lg relative"
+          exit={{ opacity: 0, scale: 0.96 }}
+          transition={{ type: 'spring', damping: 24, stiffness: 280 }}
+          className="glass-card relative w-full max-w-xl p-6 md:p-7"
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-slate-400 dark:text-zinc-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="icon-button absolute right-4 top-4" title="Close">
+            <X className="h-4 w-4" />
           </button>
 
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 dark:bg-gradient-primary flex items-center justify-center shadow-lg shadow-blue-600/20 dark:shadow-none">
-              <Plus className="w-5 h-5 text-white" />
+          <div className="mb-6 flex items-start gap-4 pr-12">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:bg-gradient-primary dark:shadow-none">
+              <Plus className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Import YouTube Source</h2>
-              <p className="text-sm text-slate-500 dark:text-zinc-400">Paste a YouTube playlist or video URL</p>
+              <h2 className="text-xl font-bold text-slate-950 dark:text-white">Import a learning source</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Paste a YouTube video or playlist. Ytutor will process captions, transcripts, and searchable chunks.
+              </p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleImport()}
-              placeholder="https://www.youtube.com/watch?v=... or /playlist?list=..."
-              className="input-field"
-              autoFocus
-              disabled={loading}
-            />
-
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-2 text-rose-400 text-sm bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3"
-              >
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {error}
-              </motion.div>
-            )}
-
-            <button
-              onClick={handleImport}
-              disabled={loading || !url.trim()}
-              className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <ArrowRight className="w-4 h-4" />
-                  Import
-                </>
-              )}
-            </button>
-          </div>
-
-          <p className="text-xs text-slate-500 dark:text-zinc-500 mt-4 text-center">
-            We'll transcribe the video content and build a searchable AI knowledge base.
-          </p>
+          <ImportForm onImport={onImport} compact onDone={onClose} />
         </motion.div>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+function ImportPanel({ onImport }) {
+  return (
+    <section className="glass-card overflow-hidden">
+      <div className="border-b border-slate-200/80 bg-gradient-to-r from-blue-50 via-white to-pink-50 px-5 py-4 dark:border-white/[0.06] dark:from-blue-500/10 dark:via-transparent dark:to-pink-500/10">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-200 dark:ring-blue-400/20">
+              <Sparkles className="h-3.5 w-3.5" />
+              Start learning faster
+            </div>
+            <h2 className="text-xl font-bold text-slate-950 dark:text-white">Import a YouTube source</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+              Add a video or playlist and open the workspace as soon as the first transcript is ready.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="p-5">
+        <ImportForm onImport={onImport} />
+      </div>
+    </section>
   );
 }
 
@@ -130,7 +174,6 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
   const canOpen = isReady || processedCount > 0;
   const processingLabel = status?.current_phase || 'Processing';
 
-  // Poll for status while processing
   useEffect(() => {
     if (!isProcessing) return;
 
@@ -174,6 +217,12 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
   };
 
   const progress = status?.progress_percent ?? 0;
+  const statusLabel = isReady ? 'Ready' : isError ? 'Error' : canOpen ? 'Open now' : 'Processing';
+  const statusClass = isError
+    ? 'bg-pink-50 text-pink-700 border-pink-100 dark:bg-pink-500/15 dark:text-pink-300 dark:border-pink-400/20'
+    : isReady || canOpen
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/20'
+      : 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-400/20';
 
   return (
     <motion.div
@@ -181,85 +230,69 @@ function PlaylistCard({ playlist, onDelete, onRefresh }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="glass-card-hover group cursor-pointer overflow-hidden"
+      className={`glass-card-hover group overflow-hidden ${canOpen ? 'cursor-pointer' : 'cursor-default'}`}
       onClick={() => canOpen && navigate(`/playlist/${playlist.id}`)}
     >
-      {/* Thumbnail */}
-      <div className="relative h-40 overflow-hidden">
+      <div className="relative h-44 overflow-hidden bg-slate-100 dark:bg-[#0d1320]">
         {playlist.thumbnail ? (
           <img
             src={playlist.thumbnail}
             alt={playlist.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-blue-50 to-slate-100 dark:from-primary-900/40 dark:to-dark-200 flex items-center justify-center">
-            <Video className="w-12 h-12 text-blue-200 dark:text-primary-500/30" />
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-50 via-white to-pink-50 dark:from-blue-500/10 dark:via-[#101522] dark:to-pink-500/10">
+            <Video className="h-12 w-12 text-blue-300 dark:text-blue-400/40" />
           </div>
         )}
 
-        {/* Status overlay */}
+        <div className="absolute inset-x-0 top-0 flex items-start justify-between p-3">
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold shadow-sm backdrop-blur ${statusClass}`}>
+            {isError ? <AlertCircle className="h-3.5 w-3.5" /> : canOpen ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {statusLabel}
+          </span>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="icon-button opacity-100 md:opacity-0 md:group-hover:opacity-100"
+            title="Delete source"
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        </div>
+
         {isProcessing && (
-          <div className="absolute inset-0 bg-white/80 dark:bg-dark-400/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 text-blue-600 dark:text-primary-400 animate-spin mx-auto mb-2" />
-              <p className="text-sm text-blue-700 dark:text-primary-300 font-medium">{processingLabel}</p>
-              {processedCount > 0 && (
-                <p className="text-xs text-slate-600 dark:text-zinc-400 mt-1">
-                  {processedCount}/{totalCount} ready - open now
-                </p>
-              )}
-              {progress > 0 && (
-                <div className="w-32 h-1.5 bg-slate-200 dark:bg-dark-100 rounded-full mt-2 mx-auto overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 dark:bg-gradient-primary rounded-full transition-all duration-500"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              )}
+          <div className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/70 bg-white/90 p-3 shadow-sm backdrop-blur dark:border-white/[0.08] dark:bg-[#0d1320]/90">
+            <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+              <span className="font-semibold text-blue-700 dark:text-blue-300">{processingLabel}</span>
+              {processedCount > 0 && <span className="text-slate-500 dark:text-slate-400">{processedCount}/{totalCount} ready</span>}
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.08]">
+              <div className="h-full rounded-full bg-blue-600 transition-all duration-500 dark:bg-blue-400" style={{ width: `${progress}%` }} />
             </div>
           </div>
         )}
-
-        {/* Video count badge */}
-        <div className="absolute top-3 right-3 badge-status">
-          <Video className="w-3 h-3 mr-1" />
-          {playlist.video_count === 1 ? '1 video' : `${playlist.video_count} videos`}
-        </div>
-
-        {/* Delete button */}
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="absolute top-3 left-3 w-8 h-8 rounded-lg bg-white/80 dark:bg-dark-400/80 backdrop-blur text-slate-500 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm dark:shadow-none border border-slate-200 dark:border-transparent"
-        >
-          {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-        </button>
       </div>
 
-      {/* Content */}
-      <div className="p-5">
-        <h3 className="font-semibold text-slate-900 dark:text-white text-sm line-clamp-2 mb-1.5 group-hover:text-blue-600 dark:group-hover:text-primary-300 transition-colors">
-          {playlist.title || 'Untitled Playlist'}
-        </h3>
-        <p className="text-xs text-slate-500 dark:text-zinc-500 mb-3">{playlist.channel || 'Unknown Channel'}</p>
+      <div className="space-y-4 p-5">
+        <div>
+          <h3 className="line-clamp-2 text-sm font-bold leading-6 text-slate-950 transition-colors group-hover:text-blue-700 dark:text-white dark:group-hover:text-blue-300">
+            {playlist.title || 'Untitled Source'}
+          </h3>
+          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">{playlist.channel || 'Unknown Channel'}</p>
+        </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            {isError ? (
-              <AlertCircle className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
-            ) : canOpen ? (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-            ) : isProcessing ? (
-              <Loader2 className="w-3.5 h-3.5 text-blue-600 dark:text-primary-400 animate-spin" />
-            ) : null}
-            <span className={`text-xs font-medium ${isReady ? 'text-emerald-600 dark:text-emerald-400' : isError ? 'text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-primary-400'}`}>
-              {isReady ? 'Ready' : isError ? 'Error' : canOpen ? 'Open now' : 'Processing'}
-            </span>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-white/[0.06] dark:text-slate-300">
+            <Video className="h-3.5 w-3.5" />
+            {playlist.video_count === 1 ? '1 video' : `${playlist.video_count} videos`}
+          </span>
 
           {canOpen && (
-            <ArrowRight className="w-4 h-4 text-slate-400 dark:text-zinc-500 group-hover:text-blue-600 dark:group-hover:text-primary-400 group-hover:translate-x-1 transition-all" />
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 dark:text-blue-300">
+              Open
+              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+            </span>
           )}
         </div>
       </div>
@@ -305,116 +338,109 @@ export default function Dashboard() {
 
   return (
     <div className="relative z-10 min-h-screen">
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/70 dark:bg-dark-400/70 border-b border-slate-200/50 dark:border-white/[0.04]">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate('/')}>
-            <div className="w-8 h-8 rounded-lg bg-blue-600 dark:bg-gradient-primary flex items-center justify-center group-hover:scale-105 transition-transform">
-              <GraduationCap className="w-5 h-5 text-white" />
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[#080b12]/85">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 md:px-6">
+          <button className="flex items-center gap-3 group" onClick={() => navigate('/')}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 transition-transform group-hover:scale-105 dark:bg-gradient-primary dark:shadow-none">
+              <GraduationCap className="h-5 w-5" />
             </div>
-            <span className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">Ytutor AI</span>
-          </div>
+            <span className="text-lg font-black tracking-tight text-slate-950 transition-colors group-hover:text-blue-700 dark:text-white dark:group-hover:text-blue-300">
+              Ytutor AI
+            </span>
+          </button>
 
-          <div className="flex items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-2 md:gap-3">
             <ThemeToggle />
-            
-            <div className="w-px h-6 bg-slate-200 dark:bg-white/[0.08] hidden sm:block"></div>
-
-            <div className="hidden sm:flex items-center gap-2 text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-dark-200 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.04]">
-              <User className="w-4 h-4" />
-              <span className="text-sm font-medium">{user?.username}</span>
+            <div className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-600 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 sm:flex">
+              <User className="h-4 w-4" />
+              <span className="text-sm font-semibold">{user?.username}</span>
             </div>
-            
             <button
               onClick={() => {
                 logout();
                 navigate('/login');
               }}
-              className="p-2 text-slate-400 dark:text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+              className="icon-button hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700 dark:hover:border-pink-400/30 dark:hover:bg-pink-500/10 dark:hover:text-pink-300"
               title="Log out"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="h-4 w-4" />
             </button>
-
-            <div className="w-px h-6 bg-slate-200 dark:bg-white/[0.08] mx-1"></div>
-
             <button
               onClick={() => setShowImport(true)}
-              className="btn-primary text-sm !px-4 !py-2 md:!px-5 md:!py-2.5 flex items-center gap-2"
+              className="btn-primary hidden items-center gap-2 !px-4 !py-2 text-sm md:inline-flex"
             >
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Import Source</span><span className="sm:hidden">Import</span>
+              <Plus className="h-4 w-4" />
+              Import
             </button>
           </div>
         </div>
       </header>
 
-      {/* ── Content ────────────────────────────────────────────── */}
-      <main className="max-w-7xl mx-auto px-6 py-10">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Your Sources</h1>
-            <p className="text-slate-500 dark:text-zinc-400 text-sm mt-1">
-              {playlists.length > 0
-                ? `${playlists.length} source${playlists.length > 1 ? 's' : ''} imported`
-                : 'Import a YouTube playlist or video to get started'}
-            </p>
-          </div>
-          <button
-            onClick={fetchPlaylists}
-            className="text-slate-400 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-primary-400 transition-colors p-2 bg-white dark:bg-transparent border border-slate-200 dark:border-transparent rounded-lg shadow-sm dark:shadow-none"
-            title="Refresh"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
+      <main className="mx-auto max-w-7xl space-y-8 px-5 py-8 md:px-6 md:py-10">
+        <ImportPanel onImport={handleImport} />
 
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="glass-card overflow-hidden animate-pulse">
-                <div className="h-40 bg-slate-100 dark:bg-dark-50" />
-                <div className="p-5 space-y-3">
-                  <div className="h-4 bg-slate-100 dark:bg-dark-50 rounded w-3/4" />
-                  <div className="h-3 bg-slate-100 dark:bg-dark-50 rounded w-1/2" />
-                  <div className="h-3 bg-slate-100 dark:bg-dark-50 rounded w-1/4" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : playlists.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex flex-col items-center justify-center py-24"
-          >
-            <div className="w-20 h-20 rounded-2xl bg-blue-50 dark:bg-primary-500/10 flex items-center justify-center mb-6 border border-blue-100 dark:border-transparent">
-              <Video className="w-10 h-10 text-blue-500 dark:text-primary-500/50" />
+        <section className="space-y-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">Your Sources</h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                {playlists.length > 0
+                  ? `${playlists.length} source${playlists.length > 1 ? 's' : ''} imported and ready to organize.`
+                  : 'Import a YouTube playlist or video to get started.'}
+              </p>
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No sources yet</h3>
-            <p className="text-slate-500 dark:text-zinc-400 text-sm mb-6 max-w-sm text-center">
-              Import your first YouTube playlist or video to start learning with AI-powered tools.
-            </p>
-            <button
-              onClick={() => setShowImport(true)}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> Import Your First Source
+            <button onClick={fetchPlaylists} className="btn-secondary inline-flex items-center gap-2 !px-4 !py-2 text-sm">
+              <RefreshCw className="h-4 w-4" />
+              Refresh
             </button>
-          </motion.div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <AnimatePresence mode="popLayout">
-              {playlists.map((playlist) => (
-                <PlaylistCard
-                  key={playlist.id}
-                  playlist={playlist}
-                  onDelete={handleDelete}
-                  onRefresh={fetchPlaylists}
-                />
-              ))}
-            </AnimatePresence>
           </div>
-        )}
+
+          {loading ? (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="glass-card overflow-hidden animate-pulse">
+                  <div className="h-44 bg-slate-100 dark:bg-white/[0.04]" />
+                  <div className="space-y-3 p-5">
+                    <div className="h-4 w-3/4 rounded bg-slate-100 dark:bg-white/[0.04]" />
+                    <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-white/[0.04]" />
+                    <div className="h-7 w-full rounded bg-slate-100 dark:bg-white/[0.04]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : playlists.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-white/70 px-6 py-16 text-center dark:border-blue-400/20 dark:bg-white/[0.03]"
+            >
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-400/20">
+                <Video className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-950 dark:text-white">No sources yet</h3>
+              <p className="mt-2 max-w-sm text-sm text-slate-500 dark:text-slate-400">
+                Paste a YouTube link above or use the import modal to create your first AI study workspace.
+              </p>
+              <button onClick={() => setShowImport(true)} className="btn-primary mt-6 inline-flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Import Your First Source
+              </button>
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <AnimatePresence mode="popLayout">
+                {playlists.map((playlist) => (
+                  <PlaylistCard
+                    key={playlist.id}
+                    playlist={playlist}
+                    onDelete={handleDelete}
+                    onRefresh={fetchPlaylists}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
       </main>
 
       <ImportModal
