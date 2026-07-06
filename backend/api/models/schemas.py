@@ -168,6 +168,7 @@ class VoiceNoteOrganizeRequest(BaseModel):
     """Request to organize a raw voice-note transcript."""
     raw_transcript: Optional[str] = Field(default=None, description="Optional edited transcript text")
     title: Optional[str] = Field(default=None, max_length=256)
+    language_mode: Optional[str] = Field(default=None, pattern="^(preserve|hinglish|hindi|english)$")
 
 
 class VoiceNoteResponse(BaseModel):
@@ -175,9 +176,13 @@ class VoiceNoteResponse(BaseModel):
     id: int
     title: str
     raw_transcript: str = ""
+    cleaned_transcript: str = ""
     organized_content: str = ""
     status: str = "transcribed"
     detected_language: str = ""
+    language_mode: str = "hinglish"
+    transcription_model: str = ""
+    transcription_source: str = ""
     duration_seconds: float = 0
     audio_mime_type: str = ""
     error_message: Optional[str] = None

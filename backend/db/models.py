@@ -176,9 +176,13 @@ class VoiceNote(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(256), default="Voice Note")
     raw_transcript = Column(Text, default="")
+    cleaned_transcript = Column(Text, default="")
     organized_content = Column(Text, default="")
     status = Column(String(20), default="transcribed")  # transcribing | transcribed | organizing | ready | error
     detected_language = Column(String(32), default="")
+    language_mode = Column(String(32), default="hinglish")
+    transcription_model = Column(String(64), default="")
+    transcription_source = Column(String(64), default="")
     duration_seconds = Column(Float, default=0.0)
     audio_mime_type = Column(String(128), default="")
     error_message = Column(Text, nullable=True)

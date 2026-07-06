@@ -42,41 +42,53 @@ MARKER_PATTERN = re.compile(
 # ── Whisper model singleton ──────────────────────────────────────
 
 @lru_cache(maxsize=1)
-def get_whisper_model():
+def get_whisper_model(model_name: str = None):
     """
     Load and cache the Whisper model (singleton).
 
     Model is loaded once and reused for all transcriptions.
-    Uses the WHISPER_MODEL env var (default: 'base').
+    Uses the WHISPER_MODEL env var (default: 'base') unless a model is passed.
     """
     import whisper
 
-    logger.info(f"Loading Whisper model: '{WHISPER_MODEL_NAME}'...")
+    model_to_load = model_name or WHISPER_MODEL_NAME
+    logger.info(f"Loading Whisper model: '{model_to_load}'...")
     start = time.time()
-    model = whisper.load_model(WHISPER_MODEL_NAME)
+    model = whisper.load_model(model_to_load)
     elapsed = time.time() - start
-    logger.info(f"Whisper model '{WHISPER_MODEL_NAME}' loaded in {elapsed:.1f}s")
+    logger.info(f"Whisper model '{model_to_load}' loaded in {elapsed:.1f}s")
     return model
 
 
 # ── Core transcription ───────────────────────────────────────────
 
-def transcribe_audio_file(audio_path: str, label: str = "audio") -> Optional[dict]:
+def transcribe_audio_file(
+    audio_path: str,
+    label: str = "audio",
+    model_name: str = None,
+    language: str = None,
+    initial_prompt: str = None,
+) -> Optional[dict]:
     """
     Transcribe a local audio file with the cached Whisper model.
 
     Returns transcript text, segments, detected language, and duration metadata.
     """
     try:
-        model = get_whisper_model()
+        use_model_name = model_name or WHISPER_MODEL_NAME
+        model = get_whisper_model(use_model_name)
 
-        logger.info(f"Transcribing {label} with Whisper ({WHISPER_MODEL_NAME})...")
+        logger.info(f"Transcribing {label} with Whisper ({use_model_name})...")
         transcribe_start = time.time()
-        result = model.transcribe(
-            audio_path,
-            language=None,
-            verbose=False,
-        )
+        transcribe_options = {
+            "language": language,
+            "task": "transcribe",
+            "verbose": False,
+        }
+        if initial_prompt:
+            transcribe_options["initial_prompt"] = initial_prompt
+
+        result = model.transcribe(audio_path, **transcribe_options)
         transcribe_elapsed = time.time() - transcribe_start
 
         segments = []
@@ -103,7 +115,7 @@ def transcribe_audio_file(audio_path: str, label: str = "audio") -> Optional[dic
             video_id=label,
             audio_duration=audio_duration,
             transcribe_time=transcribe_elapsed,
-            model_name=WHISPER_MODEL_NAME,
+            model_name=use_model_name,
             transcript_length=len(full_text),
             segment_count=len(segments),
             detected_language=detected_lang,
@@ -118,6 +130,7 @@ def transcribe_audio_file(audio_path: str, label: str = "audio") -> Optional[dic
             "segments": segments,
             "language": detected_lang,
             "duration_seconds": audio_duration,
+            "model_name": use_model_name,
         }
 
     except Exception as e:

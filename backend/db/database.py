@@ -6,6 +6,7 @@ Tables are auto-created on first connection.
 """
 
 import os
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from dotenv import load_dotenv
@@ -48,6 +49,28 @@ async def init_db():
     """Create all tables if they don't exist."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _ensure_voice_note_columns(conn)
+
+
+async def _ensure_voice_note_columns(conn):
+    """Add optional voice-note columns for existing local databases."""
+    dialect = conn.dialect.name
+    columns = {
+        "cleaned_transcript": "TEXT DEFAULT ''",
+        "language_mode": "VARCHAR(32) DEFAULT 'hinglish'",
+        "transcription_model": "VARCHAR(64) DEFAULT ''",
+        "transcription_source": "VARCHAR(64) DEFAULT ''",
+    }
+
+    if dialect == "sqlite":
+        result = await conn.execute(text("PRAGMA table_info(voice_notes)"))
+        existing = {row[1] for row in result.fetchall()}
+        for name, definition in columns.items():
+            if name not in existing:
+                await conn.execute(text(f"ALTER TABLE voice_notes ADD COLUMN {name} {definition}"))
+    elif dialect in {"postgresql", "postgres"}:
+        for name, definition in columns.items():
+            await conn.execute(text(f"ALTER TABLE voice_notes ADD COLUMN IF NOT EXISTS {name} {definition}"))
 
 
 async def get_db() -> AsyncSession:

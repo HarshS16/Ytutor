@@ -201,9 +201,10 @@ export async function getVoiceNote(voiceNoteId) {
   return res.data;
 }
 
-export async function transcribeVoiceNote(audioBlob, title = '') {
+export async function transcribeVoiceNote(audioBlob, title = '', languageMode = 'hinglish') {
   const form = new FormData();
   form.append('title', title);
+  form.append('language_mode', languageMode);
   form.append('audio', audioBlob, audioBlob.name || 'voice-note.webm');
   const res = await api.post('/api/voice-notes/transcribe', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -212,10 +213,11 @@ export async function transcribeVoiceNote(audioBlob, title = '') {
   return res.data;
 }
 
-export async function organizeVoiceNote(voiceNoteId, rawTranscript, title = '') {
+export async function organizeVoiceNote(voiceNoteId, rawTranscript, title = '', languageMode = 'hinglish') {
   const res = await api.post(`/api/voice-notes/${voiceNoteId}/organize`, {
     raw_transcript: rawTranscript,
     title,
+    language_mode: languageMode,
   }, {
     timeout: 600000,
   });

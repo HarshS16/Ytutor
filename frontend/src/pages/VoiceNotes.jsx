@@ -51,6 +51,13 @@ const getFilenameFromDisposition = (header) => {
   return 'ytutor_voice_note.pdf';
 };
 
+const languageModes = [
+  { id: 'preserve', label: 'Preserve as spoken' },
+  { id: 'hinglish', label: 'Hinglish / Roman Hindi' },
+  { id: 'hindi', label: 'Hindi / Devanagari' },
+  { id: 'english', label: 'English' },
+];
+
 export default function VoiceNotes() {
   const navigate = useNavigate();
   const mediaRecorderRef = useRef(null);
@@ -61,6 +68,7 @@ export default function VoiceNotes() {
   const [activeNote, setActiveNote] = useState(null);
   const [title, setTitle] = useState('');
   const [rawTranscript, setRawTranscript] = useState('');
+  const [languageMode, setLanguageMode] = useState('hinglish');
   const [recordingState, setRecordingState] = useState('idle');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState('');
@@ -93,7 +101,8 @@ export default function VoiceNotes() {
   const loadNote = (note) => {
     setActiveNote(note);
     setTitle(note.title || 'Voice Note');
-    setRawTranscript(note.raw_transcript || '');
+    setRawTranscript(note.cleaned_transcript || note.raw_transcript || '');
+    setLanguageMode(note.language_mode || 'hinglish');
     setSelectedAudio(null);
     setError('');
     if (audioPreviewUrl) {
@@ -106,6 +115,7 @@ export default function VoiceNotes() {
     setActiveNote(null);
     setTitle('');
     setRawTranscript('');
+    setLanguageMode('hinglish');
     setSelectedAudio(null);
     setRecordingSeconds(0);
     setError('');
@@ -206,10 +216,11 @@ export default function VoiceNotes() {
     setTranscribing(true);
     setError('');
     try {
-      const note = await transcribeVoiceNote(selectedAudio, title);
+      const note = await transcribeVoiceNote(selectedAudio, title, languageMode);
       setActiveNote(note);
       setTitle(note.title || '');
-      setRawTranscript(note.raw_transcript || '');
+      setRawTranscript(note.cleaned_transcript || note.raw_transcript || '');
+      setLanguageMode(note.language_mode || languageMode);
       await refreshNotes();
     } catch (err) {
       setError(err.response?.data?.detail || 'Transcription failed. Try a shorter or clearer audio file.');
@@ -223,10 +234,11 @@ export default function VoiceNotes() {
     setOrganizing(true);
     setError('');
     try {
-      const note = await organizeVoiceNote(activeNote.id, rawTranscript, title || activeNote.title);
+      const note = await organizeVoiceNote(activeNote.id, rawTranscript, title || activeNote.title, languageMode);
       setActiveNote(note);
       setTitle(note.title || '');
-      setRawTranscript(note.raw_transcript || '');
+      setRawTranscript(note.cleaned_transcript || note.raw_transcript || '');
+      setLanguageMode(note.language_mode || languageMode);
       await refreshNotes();
     } catch (err) {
       setError(err.response?.data?.detail || 'Organization failed. Please try again.');
@@ -265,6 +277,7 @@ export default function VoiceNotes() {
 
   const organizedContent = activeNote?.organized_content || '';
   const hasTranscript = rawTranscript.trim().length > 0;
+  const activeLanguageMode = languageModes.find((mode) => mode.id === languageMode) || languageModes[1];
   const statusMeta = useMemo(() => {
     if (!activeNote) return null;
     if (activeNote.status === 'ready') return { label: 'Organized', className: 'badge-status' };
@@ -329,7 +342,10 @@ export default function VoiceNotes() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-slate-950 dark:text-white">{note.title || 'Voice Note'}</p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDate(note.updated_at || note.created_at)}</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {formatDate(note.updated_at || note.created_at)}
+                        {note.language_mode ? ` - ${languageModes.find((mode) => mode.id === note.language_mode)?.label || note.language_mode}` : ''}
+                      </p>
                     </div>
                     {note.status === 'ready' && <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600 dark:text-emerald-300" />}
                   </div>
@@ -374,6 +390,27 @@ export default function VoiceNotes() {
                 placeholder="Voice note title"
                 className="input-field"
               />
+
+              <div>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Language mode</label>
+                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                    Default: Hinglish / Roman Hindi
+                  </span>
+                </div>
+                <div className="segmented-control flex flex-wrap">
+                  {languageModes.map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setLanguageMode(mode.id)}
+                      className={`segment-button ${languageMode === mode.id ? 'segment-button-active' : ''}`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
@@ -431,6 +468,9 @@ export default function VoiceNotes() {
                     Voice workflow
                   </div>
                   <p className="mt-2">First transcribe the raw speech. Edit any words if needed. Then organize it into a clean note without changing your language mix.</p>
+                  <p className="mt-3 rounded-xl bg-white/70 px-3 py-2 text-xs font-semibold text-blue-700 ring-1 ring-blue-100 dark:bg-white/[0.05] dark:text-blue-300 dark:ring-blue-400/20">
+                    Current mode: {activeLanguageMode.label}
+                  </p>
                 </div>
               </div>
 
