@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, GraduationCap, Loader2, Trash2, ArrowRight,
   Video, CheckCircle2, AlertCircle, RefreshCw,
-  X, LogOut, User, Link2, ListVideo, PlaySquare, Sparkles
+  X, LogOut, User, Link2, ListVideo, PlaySquare, Sparkles, Mic
 } from 'lucide-react';
 import { getPlaylists, importPlaylist, deletePlaylist, getPlaylistStatus } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -156,6 +156,34 @@ function ImportPanel({ onImport }) {
       </div>
       <div className="p-5">
         <ImportForm onImport={onImport} />
+      </div>
+    </section>
+  );
+}
+
+function VoiceNotesPanel({ onOpen }) {
+  return (
+    <section className="glass-card overflow-hidden">
+      <div className="border-b border-slate-200/80 bg-gradient-to-r from-white via-blue-50 to-pink-50 px-5 py-4 dark:border-white/[0.06] dark:from-transparent dark:via-blue-500/10 dark:to-pink-500/10">
+        <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-pink-700 ring-1 ring-pink-100 dark:bg-pink-500/10 dark:text-pink-200 dark:ring-pink-400/20">
+          <Mic className="h-3.5 w-3.5" />
+          New
+        </div>
+        <h2 className="text-xl font-bold text-slate-950 dark:text-white">Create notes with your voice</h2>
+        <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+          Record in English, Hindi, or Hinglish, then organize your own explanation into downloadable notes.
+        </p>
+      </div>
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="badge-status">Speech to text</span>
+          <span className="badge-accent">Organized notes</span>
+          <span className="badge-status">PDF export</span>
+        </div>
+        <button onClick={onOpen} className="btn-primary inline-flex items-center justify-center gap-2 whitespace-nowrap">
+          <Mic className="h-4 w-4" />
+          Open Voice Notes
+        </button>
       </div>
     </section>
   );
@@ -377,7 +405,10 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-8 px-5 py-8 md:px-6 md:py-10">
-        <ImportPanel onImport={handleImport} />
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)]">
+          <ImportPanel onImport={handleImport} />
+          <VoiceNotesPanel onOpen={() => navigate('/voice-notes')} />
+        </div>
 
         <section className="space-y-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

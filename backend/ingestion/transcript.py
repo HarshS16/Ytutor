@@ -61,6 +61,74 @@ def get_whisper_model():
 
 # ── Core transcription ───────────────────────────────────────────
 
+def transcribe_audio_file(audio_path: str, label: str = "audio") -> Optional[dict]:
+    """
+    Transcribe a local audio file with the cached Whisper model.
+
+    Returns transcript text, segments, detected language, and duration metadata.
+    """
+    try:
+        model = get_whisper_model()
+
+        logger.info(f"Transcribing {label} with Whisper ({WHISPER_MODEL_NAME})...")
+        transcribe_start = time.time()
+        result = model.transcribe(
+            audio_path,
+            language=None,
+            verbose=False,
+        )
+        transcribe_elapsed = time.time() - transcribe_start
+
+        segments = []
+        for seg in result.get("segments", []):
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+            start = float(seg.get("start", 0.0))
+            end = float(seg.get("end", start))
+            segments.append({
+                "text": text,
+                "start": start,
+                "duration": max(0.0, end - start),
+            })
+
+        full_text = (result.get("text") or "").strip()
+        detected_lang = result.get("language", "unknown")
+        audio_duration = 0.0
+        if segments:
+            last = segments[-1]
+            audio_duration = last["start"] + last["duration"]
+
+        _log_whisper_metrics(
+            video_id=label,
+            audio_duration=audio_duration,
+            transcribe_time=transcribe_elapsed,
+            model_name=WHISPER_MODEL_NAME,
+            transcript_length=len(full_text),
+            segment_count=len(segments),
+            detected_language=detected_lang,
+        )
+
+        if not segments and not full_text:
+            logger.warning(f"Whisper produced no transcript for {label}")
+            return None
+
+        return {
+            "text": full_text or " ".join(seg["text"] for seg in segments),
+            "segments": segments,
+            "language": detected_lang,
+            "duration_seconds": audio_duration,
+        }
+
+    except Exception as e:
+        logger.error(
+            f"Whisper transcription failed for {label}: "
+            f"{type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        return None
+
+
 def transcribe_video(video_id: str) -> Optional[list[dict]]:
     """
     Download audio and transcribe a YouTube video using Whisper.
@@ -87,69 +155,16 @@ def transcribe_video(video_id: str) -> Optional[list[dict]]:
         logger.error(f"Audio download failed for {video_id}: {e}")
         return None
 
-    # Step 2: Transcribe with Whisper
-    try:
-        model = get_whisper_model()
-
-        logger.info(f"Transcribing {video_id} with Whisper ({WHISPER_MODEL_NAME})...")
-        transcribe_start = time.time()
-
-        result = model.transcribe(
-            audio_path,
-            language=None,  # Auto-detect language
-            verbose=False,
-        )
-
-        transcribe_elapsed = time.time() - transcribe_start
-
-        segments = []
-        for seg in result.get("segments", []):
-            text = seg.get("text", "").strip()
-            if not text:
-                continue
-            segments.append({
-                "text": text,
-                "start": seg.get("start", 0.0),
-                "duration": seg.get("end", 0.0) - seg.get("start", 0.0),
-            })
-
-        full_text = result.get("text", "")
-        detected_lang = result.get("language", "unknown")
-
-        audio_duration = 0.0
-        if segments:
-            last = segments[-1]
-            audio_duration = last["start"] + last["duration"]
-
-        _log_whisper_metrics(
-            video_id=video_id,
-            audio_duration=audio_duration,
-            transcribe_time=transcribe_elapsed,
-            model_name=WHISPER_MODEL_NAME,
-            transcript_length=len(full_text),
-            segment_count=len(segments),
-            detected_language=detected_lang,
-        )
-
-        if not segments:
-            logger.warning(f"Whisper produced no segments for {video_id}")
-            return None
-
-        # Step 3: Clean up audio cache after successful transcription
-        try:
-            cleanup_audio(video_id)
-        except Exception as e:
-            logger.warning(f"Audio cleanup failed for {video_id}: {e}")
-
-        return segments
-
-    except Exception as e:
-        logger.error(
-            f"Whisper transcription failed for {video_id}: "
-            f"{type(e).__name__}: {e}",
-            exc_info=True,
-        )
+    result = transcribe_audio_file(audio_path, label=video_id)
+    if not result or not result["segments"]:
         return None
+
+    try:
+        cleanup_audio(video_id)
+    except Exception as e:
+        logger.warning(f"Audio cleanup failed for {video_id}: {e}")
+
+    return result["segments"]
 
 
 def fetch_caption_transcript(video_id: str) -> tuple[Optional[list[dict]], Optional[str]]:

@@ -191,6 +191,50 @@ export async function getNotes(playlistId) {
 
 // ── Flashcard APIs ────────────────────────────────────────────────
 
+export async function getVoiceNotes() {
+  const res = await api.get('/api/voice-notes');
+  return res.data;
+}
+
+export async function getVoiceNote(voiceNoteId) {
+  const res = await api.get(`/api/voice-notes/${voiceNoteId}`);
+  return res.data;
+}
+
+export async function transcribeVoiceNote(audioBlob, title = '') {
+  const form = new FormData();
+  form.append('title', title);
+  form.append('audio', audioBlob, audioBlob.name || 'voice-note.webm');
+  const res = await api.post('/api/voice-notes/transcribe', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000,
+  });
+  return res.data;
+}
+
+export async function organizeVoiceNote(voiceNoteId, rawTranscript, title = '') {
+  const res = await api.post(`/api/voice-notes/${voiceNoteId}/organize`, {
+    raw_transcript: rawTranscript,
+    title,
+  }, {
+    timeout: 600000,
+  });
+  return res.data;
+}
+
+export async function deleteVoiceNote(voiceNoteId) {
+  const res = await api.delete(`/api/voice-notes/${voiceNoteId}`);
+  return res.data;
+}
+
+export async function downloadVoiceNotePdf(voiceNoteId) {
+  const res = await api.get(`/api/voice-notes/${voiceNoteId}/export/pdf`, {
+    responseType: 'blob',
+    timeout: 120000,
+  });
+  return res;
+}
+
 export async function generateFlashcards(playlistId, count = 10) {
   const res = await api.post('/api/flashcards/generate', {
     playlist_id: playlistId,

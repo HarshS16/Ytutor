@@ -151,6 +151,7 @@ from api.routers.notes import router as notes_router
 from api.routers.flashcards import router as flashcards_router
 from api.routers.quiz import router as quiz_router
 from api.routers.export import router as export_router
+from api.routers.voice_notes import router as voice_notes_router
 
 app.include_router(auth_router)
 app.include_router(playlist_router)
@@ -159,6 +160,7 @@ app.include_router(notes_router)
 app.include_router(flashcards_router)
 app.include_router(quiz_router)
 app.include_router(export_router)
+app.include_router(voice_notes_router)
 
 
 # ── Prerequisite status (populated at startup) ────────────────────

@@ -164,6 +164,36 @@ class NotesJobStatusResponse(NotesGenerateJobResponse):
 
 # ── Flashcard Schemas ─────────────────────────────────────────────
 
+class VoiceNoteOrganizeRequest(BaseModel):
+    """Request to organize a raw voice-note transcript."""
+    raw_transcript: Optional[str] = Field(default=None, description="Optional edited transcript text")
+    title: Optional[str] = Field(default=None, max_length=256)
+
+
+class VoiceNoteResponse(BaseModel):
+    """Single voice-note session."""
+    id: int
+    title: str
+    raw_transcript: str = ""
+    organized_content: str = ""
+    status: str = "transcribed"
+    detected_language: str = ""
+    duration_seconds: float = 0
+    audio_mime_type: str = ""
+    error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class VoiceNotesListResponse(BaseModel):
+    """Response with saved voice-note sessions."""
+    voice_notes: list[VoiceNoteResponse]
+    total: int
+
+
 class FlashcardGenerateRequest(BaseModel):
     """Request to generate flashcards."""
     playlist_id: int

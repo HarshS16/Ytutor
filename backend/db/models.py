@@ -1,7 +1,7 @@
 """
 SQLAlchemy ORM models for Ytutor AI.
 
-Defines tables: playlists, videos, chunks, notes, flashcards, quizzes.
+Defines tables: playlists, videos, chunks, notes, flashcards, quizzes, voice notes.
 """
 
 import json
@@ -27,6 +27,7 @@ class User(Base):
     # Relationships
     playlists = relationship("Playlist", back_populates="user", cascade="all, delete-orphan")
     chat_messages = relationship("ChatMessage", back_populates="user", cascade="all, delete-orphan")
+    voice_notes = relationship("VoiceNote", back_populates="user", cascade="all, delete-orphan")
 
 
 class Playlist(Base):
@@ -165,3 +166,28 @@ class ChatMessage(Base):
     # Relationships
     user = relationship("User", back_populates="chat_messages")
     playlist = relationship("Playlist", back_populates="chat_messages")
+
+
+class VoiceNote(Base):
+    """A user-created note captured from spoken audio."""
+    __tablename__ = "voice_notes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(256), default="Voice Note")
+    raw_transcript = Column(Text, default="")
+    organized_content = Column(Text, default="")
+    status = Column(String(20), default="transcribed")  # transcribing | transcribed | organizing | ready | error
+    detected_language = Column(String(32), default="")
+    duration_seconds = Column(Float, default=0.0)
+    audio_mime_type = Column(String(128), default="")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    user = relationship("User", back_populates="voice_notes")

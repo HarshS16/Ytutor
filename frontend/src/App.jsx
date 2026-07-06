@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import Workspace from './pages/Workspace';
+import VoiceNotes from './pages/VoiceNotes';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -35,6 +36,11 @@ function App() {
             <Route path="/playlist/:id" element={
               <ProtectedRoute>
                 <Workspace />
+              </ProtectedRoute>
+            } />
+            <Route path="/voice-notes" element={
+              <ProtectedRoute>
+                <VoiceNotes />
               </ProtectedRoute>
             } />
           </Routes>

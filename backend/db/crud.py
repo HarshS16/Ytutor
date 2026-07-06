@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from db.models import Playlist, Video, Chunk, Note, Flashcard, Quiz, User, ChatMessage
+from db.models import Playlist, Video, Chunk, Note, Flashcard, Quiz, User, ChatMessage, VoiceNote
 
 logger = logging.getLogger(__name__)
 
@@ -343,3 +343,47 @@ async def get_chat_history(db: AsyncSession, user_id: int, playlist_id: int) -> 
         .order_by(ChatMessage.created_at.asc())
     )
     return list(result.scalars().all())
+
+
+# Voice Notes CRUD
+
+async def create_voice_note(db: AsyncSession, **kwargs) -> VoiceNote:
+    """Create a spoken voice-note session."""
+    note = VoiceNote(**kwargs)
+    db.add(note)
+    await db.commit()
+    await db.refresh(note)
+    logger.info(f"Created voice note {note.id} for user {note.user_id}")
+    return note
+
+
+async def get_voice_note(db: AsyncSession, voice_note_id: int) -> Optional[VoiceNote]:
+    """Get a voice note by ID."""
+    result = await db.execute(select(VoiceNote).where(VoiceNote.id == voice_note_id))
+    return result.scalar_one_or_none()
+
+
+async def get_user_voice_notes(db: AsyncSession, user_id: int) -> list[VoiceNote]:
+    """Get all voice notes for a user, newest first."""
+    result = await db.execute(
+        select(VoiceNote)
+        .where(VoiceNote.user_id == user_id)
+        .order_by(VoiceNote.updated_at.desc(), VoiceNote.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def update_voice_note(db: AsyncSession, voice_note_id: int, **kwargs) -> None:
+    """Update voice-note fields."""
+    stmt = update(VoiceNote).where(VoiceNote.id == voice_note_id).values(**kwargs)
+    await db.execute(stmt)
+    await db.commit()
+
+
+async def delete_voice_note(db: AsyncSession, voice_note_id: int) -> None:
+    """Delete a voice-note session."""
+    note = await get_voice_note(db, voice_note_id)
+    if note:
+        await db.delete(note)
+        await db.commit()
+        logger.info(f"Deleted voice note {voice_note_id}")
