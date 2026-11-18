@@ -28,7 +28,11 @@ def get_model() -> SentenceTransformer:
     """Load and cache the sentence-transformer model (singleton)."""
     logger.info(f"Loading embedding model: {MODEL_NAME}")
     model = SentenceTransformer(MODEL_NAME)
-    logger.info(f"Model loaded. Embedding dimension: {model.get_embedding_dimension()}")
+    if hasattr(model, "get_sentence_embedding_dimension"):
+        dim = model.get_sentence_embedding_dimension()
+    else:
+        dim = model.get_embedding_dimension()
+    logger.info(f"Model loaded. Embedding dimension: {dim}")
     return model
 
 

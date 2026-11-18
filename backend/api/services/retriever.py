@@ -31,7 +31,7 @@ _FALLBACK_MAX_CHARS_PER_VIDEO = 2000
 _FALLBACK_MAX_VIDEOS = 6
 
 
-def retrieve(playlist_id: int, query: str, top_k: int = TOP_K) -> list[dict]:
+async def retrieve(playlist_id: int, query: str, top_k: int = TOP_K) -> list[dict]:
     """
     Retrieve the most relevant transcript chunks for a query within a playlist.
 
@@ -49,11 +49,12 @@ def retrieve(playlist_id: int, query: str, top_k: int = TOP_K) -> list[dict]:
     """
     logger.info(f"Retrieving for playlist {playlist_id}: '{query[:80]}...'")
 
-    # Step 1: Embed the query
-    query_embedding = embed_query(query)
+    # Step 1: Embed the query (CPU-bound — run in thread)
+    query_embedding = await asyncio.to_thread(embed_query, query)
 
-    # Step 2: Search ChromaDB
-    results = query_similar(
+    # Step 2: Search ChromaDB (sync client — run in thread)
+    results = await asyncio.to_thread(
+        query_similar,
         playlist_id=playlist_id,
         query_embedding=query_embedding,
         n_results=top_k,
@@ -70,7 +71,7 @@ def retrieve(playlist_id: int, query: str, top_k: int = TOP_K) -> list[dict]:
 
     # Step 3: Fallback — pull transcripts from the DB
     logger.info("No vector results — trying DB transcript fallback")
-    fallback = _fallback_from_db(playlist_id)
+    fallback = await _fallback_from_db(playlist_id)
     if fallback:
         logger.info(f"DB fallback returned {len(fallback)} transcript chunks")
     else:
@@ -79,7 +80,7 @@ def retrieve(playlist_id: int, query: str, top_k: int = TOP_K) -> list[dict]:
     return fallback
 
 
-def _fallback_from_db(playlist_id: int) -> list[dict]:
+async def _fallback_from_db(playlist_id: int) -> list[dict]:
     """
     Pull transcript text directly from the database for videos in a playlist.
 
@@ -89,32 +90,18 @@ def _fallback_from_db(playlist_id: int) -> list[dict]:
 
     Returns a list of pseudo-chunks in the same format as vector results.
     """
-    import asyncio
     from db.database import async_session
     from db import crud
 
-    async def _fetch():
-        async with async_session() as db:
-            videos = await crud.get_playlist_videos(db, playlist_id)
-            return [
-                {"video_id": v.video_id, "title": v.title, "transcript": v.transcript_text}
-                for v in videos
-                if v.transcript_text and v.status == "ready"
-            ]
-
-    # Run async DB query from sync context
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        # We're inside an async context — use a new thread
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            videos_data = pool.submit(asyncio.run, _fetch()).result()
-    else:
-        videos_data = asyncio.run(_fetch())
+    # Must run on the request's event loop — pooled DB connections
+    # (asyncpg/aiosqlite) are bound to the loop that created them.
+    async with async_session() as db:
+        videos = await crud.get_playlist_videos(db, playlist_id)
+        videos_data = [
+            {"video_id": v.video_id, "title": v.title, "transcript": v.transcript_text}
+            for v in videos
+            if v.transcript_text and v.status == "ready"
+        ]
 
     if not videos_data:
         return []

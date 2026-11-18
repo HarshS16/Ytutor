@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
 
 # ── Light model for conversational messages ────────────────────────
-GROQ_MODEL_LIGHT = os.getenv("GROQ_MODEL_LIGHT", "llama-3.1-8b-instant")
+GROQ_MODEL_LIGHT = os.getenv("GROQ_MODEL_LIGHT", "openai/gpt-oss-20b")
 
 # ── Patterns for generic/conversational messages ───────────────────
 GREETING_PATTERNS = [
@@ -149,7 +149,7 @@ async def chat(
 
     # ── Step 2: Retrieve relevant chunks ───────────────────────────
     try:
-        chunks = retrieve(request.playlist_id, user_message)
+        chunks = await retrieve(request.playlist_id, user_message)
     except Exception as e:
         logger.error(f"Retrieval error for playlist {request.playlist_id}: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error searching the knowledge base: {str(e)}")
@@ -299,12 +299,13 @@ async def chat_stream(
 
     # ── Retrieve chunks ────────────────────────────────────────────
     try:
-        chunks = retrieve(request.playlist_id, user_message)
+        chunks = await retrieve(request.playlist_id, user_message)
     except Exception as e:
         logger.error(f"Retrieval error: {e}", exc_info=True)
+        error_msg = str(e)
 
         async def error_stream():
-            yield f"data: {json.dumps({'error': f'Error searching knowledge base: {str(e)}'})}\n\n"
+            yield f"data: {json.dumps({'error': f'Error searching knowledge base: {error_msg}'})}\n\n"
 
         return StreamingResponse(error_stream(), media_type="text/event-stream")
 

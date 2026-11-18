@@ -28,8 +28,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # ── Configuration ──────────────────────────────────────────────────
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_MODEL_LIGHT = os.getenv("GROQ_MODEL_LIGHT", "llama-3.1-8b-instant")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MODEL_LIGHT = os.getenv("GROQ_MODEL_LIGHT", "openai/gpt-oss-20b")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", 2000))
 TEMPERATURE = float(os.getenv("TEMPERATURE", 0.2))
 
