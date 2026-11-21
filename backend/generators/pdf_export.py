@@ -62,15 +62,60 @@ if _register_font("YtutorSansBold", r"C:\Windows\Fonts\arialbd.ttf"):
     FONT_BOLD = "YtutorSansBold"
 
 
+# Symbols the base PDF fonts (Helvetica/Arial) cannot render —
+# they show up as black boxes (tofu) in viewers. Map them to ASCII.
+_SYMBOL_MAP = {
+    "\u2192": "->", "\u27f6": "->", "\u21a6": "->", "\u2794": "->",
+    "\u2190": "<-", "\u21d0": "<=", "\u21d2": "=>", "\u21d4": "<=>",
+    "\u21c4": "<-", "\u21c6": "->", "\u21c8": "<->", "\u21cc": "<->",
+    "\u2194": "<->", "\u21c7": "^", "\u21c9": "v",
+    "\u22a3": "|=", "\u22a5": "_|_",
+    "\u25a0": "", "\u25a1": "", "\u25aa": "", "\u25ab": "",
+    "\u25b6": ">", "\u25c0": "<", "\u25c7": "o", "\u25cf": "o",
+    "\u25e6": "o", "\u2022": "-", "\u2023": "-", "\u2043": "-",
+    "\u2264": "<=", "\u2265": ">=", "\u2260": "!=",
+    "\u00d7": "x", "\u00f7": "/", "\u00b1": "+/-", "\u221e": "inf",
+    "\u03a3": "Sum", "\u220f": "prod", "\u221a": "sqrt",
+    "\u00b5": "u", "\u00b6": "(p)",
+    "\u20ac": "EUR", "\u00a3": "GBP", "\u00a5": "JPY", "\u20b9": "INR",
+    "\u2026": "...", "\u2013": "-", "\u2014": "-",
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+    "\u00a0": " ",
+}
+
+# Printable ASCII plus Latin-1 chars that the standard PDF fonts
+# (WinAnsiEncoding) can render.
+_SAFE_CHARS = frozenset(chr(c) for c in range(0x20, 0x7F)) | frozenset(
+    "\u00a1\u00a2\u00a3\u00a5\u00a7\u00a8\u00a9\u00aa\u00ab\u00ac\u00ae\u00af"
+    "\u00b0\u00b1\u00b4\u00b5\u00b6\u00b7\u00b8\u00b9\u00ba\u00bb\u00bc\u00bd\u00be\u00bf"
+    "\u00c0\u00c1\u00c2\u00c3\u00c4\u00c5\u00c6\u00c7\u00c8\u00c9\u00ca\u00cb\u00cc\u00cd\u00ce\u00cf"
+    "\u00d0\u00d1\u00d2\u00d3\u00d4\u00d5\u00d6\u00d8\u00d9\u00da\u00db\u00dc\u00dd\u00de\u00df"
+    "\u00e0\u00e1\u00e2\u00e3\u00e4\u00e5\u00e6\u00e7\u00e8\u00e9\u00ea\u00eb\u00ec\u00ed\u00ee\u00ef"
+    "\u00f0\u00f1\u00f2\u00f3\u00f4\u00f5\u00f6\u00f8\u00f9\u00fa\u00fb\u00fc\u00fd\u00fe\u00ff"
+    "\u0152\u0153\u0160\u0161\u0178\u017d\u017e\u0192\u02c6\u02dc"
+    "\u2013\u2014\u2018\u2019\u201a\u201c\u201d\u201e\u2020\u2021\u2022\u2026"
+    "\u2030\u2039\u203a\u20ac\u2122"
+)
+
+
 def _clean_text(value: object) -> str:
     """Return text that built-in PDF fonts can render predictably."""
     text = "" if value is None else str(value)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = text.replace("â€“", "-").replace("â€”", "-").replace("â€¦", "...")
-    text = text.replace("ðŸ”¥", "").replace("ðŸƒ", "")
+    # Repair common mojibake sequences (UTF-8 text decoded as cp1252)
+    _MOJIBAKE = {'â€œ': '"', 'â€\x9d': '"', 'â€˜': "'", 'â€™': "'", 'â€“': '-', 'â€”': '-', 'â€¦': '...', 'â€¢': '-', 'Ã©': 'e', 'Ã¨': 'e', 'Ã¡': 'a', 'Ã±': '+/-'}
+    for bad, good in _MOJIBAKE.items():
+        if bad in text:
+            text = text.replace(bad, good)
     text = re.sub(r"[\U00010000-\U0010ffff]", "", text)
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
-    return text.strip()
+    for bad, good in _SYMBOL_MAP.items():
+        if bad in text:
+            text = text.replace(bad, good)
+    # Safety net: drop anything the base fonts still can't encode
+    # (e.g. Devanagari, rare symbols) instead of rendering black boxes.
+    text = "".join(c for c in text if c in _SAFE_CHARS)
+    return re.sub(r" {2,}", " ", text).strip()
 
 
 def _inline_markdown(text: str) -> str:
