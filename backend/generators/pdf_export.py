@@ -114,7 +114,8 @@ def _clean_text(value: object) -> str:
             text = text.replace(bad, good)
     # Safety net: drop anything the base fonts still can't encode
     # (e.g. Devanagari, rare symbols) instead of rendering black boxes.
-    text = "".join(c for c in text if c in _SAFE_CHARS)
+    # Keep newlines/tabs — markdown structure depends on them.
+    text = "".join(c for c in text if c in _SAFE_CHARS or c in "\n\t")
     return re.sub(r" {2,}", " ", text).strip()
 
 
@@ -193,6 +194,7 @@ def _get_styles():
     styles.add(ParagraphStyle(
         name="Body",
         parent=styles["BodyText"],
+        fontName=FONT_REGULAR,
         fontSize=9.2,
         leading=13.5,
         textColor=INK,
