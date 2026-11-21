@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, BrainCircuit, User, Clock, Video, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { chatQuery, chatQueryStream, getChatHistory } from '../api/client';
 
 function SourceBadge({ source }) {
@@ -55,8 +56,20 @@ function MessageBubble({ message }) {
           {isUser ? (
             <p className="text-sm">{message.content}</p>
           ) : (
-            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-sm [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&>pre]:bg-slate-50 dark:[&>pre]:bg-dark-300 [&>pre]:rounded-xl [&>pre]:border [&>pre]:border-slate-200 dark:[&>pre]:border-white/[0.05]">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-sm leading-relaxed
+                [&>p]:mb-3
+                [&>ul]:mb-3 [&>ol]:mb-3 [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:pl-5 [&>ol]:pl-5 [&_li]:mb-1
+                [&>h1]:text-base [&>h1]:font-semibold [&>h1]:mt-4 [&>h1]:mb-2
+                [&>h2]:text-sm [&>h2]:font-semibold [&>h2]:mt-4 [&>h2]:mb-2
+                [&>h3]:text-sm [&>h3]:font-medium [&>h3]:mt-3 [&>h3]:mb-1
+                [&>pre]:bg-slate-50 dark:[&>pre]:bg-dark-300 [&>pre]:rounded-xl [&>pre]:border [&>pre]:border-slate-200 dark:[&>pre]:border-white/[0.05] [&>pre]:p-3 [&>pre]:overflow-x-auto [&>pre]:text-xs
+                [&>blockquote]:border-l-4 [&>blockquote]:border-blue-300 dark:[&>blockquote]:border-primary-500/40 [&>blockquote]:pl-3 [&>blockquote]:italic [&>blockquote]:text-slate-500 dark:[&>blockquote]:text-zinc-400
+                [&_table]:w-full [&_table]:text-xs [&_table]:my-3 [&_table]:border-collapse
+                [&_th]:text-left [&_th]:font-semibold [&_th]:px-2 [&_th]:py-1.5 [&_th]:border [&_th]:border-slate-200 dark:[&_th]:border-white/10 [&_th]:bg-slate-50 dark:[&_th]:bg-white/[0.04]
+                [&_td]:px-2 [&_td]:py-1.5 [&_td]:border [&_td]:border-slate-200 dark:[&_td]:border-white/10
+                [&_hr]:my-4 [&_hr]:border-slate-200 dark:[&_hr]:border-white/10
+                [&_a]:text-blue-600 dark:[&_a]:text-primary-400 [&_a]:underline">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
             </div>
           )}
         </div>

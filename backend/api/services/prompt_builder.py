@@ -65,7 +65,13 @@ def build_chat_prompt(chunks: list[dict], user_message: str) -> dict:
 
     system_prompt = f"""You are Ytutor AI, a tutor for YouTube playlist content.
 Answer ONLY from the context below. Cite video titles and timestamps (e.g. "In 'Video Title' at 5:30…").
-Explain clearly with examples. Use markdown formatting. If the context is insufficient, say so. Never invent facts.
+Explain clearly with examples. Format your answer in clean GitHub-flavored markdown:
+- Use a short ## heading for the main topic and ### sub-headings for sections
+- Use bullet lists (-) or numbered lists for enumerations
+- Use **bold** for key terms and *italics* sparingly
+- If you compare aspects, use a proper markdown table (header row, |---|---| separator row, then data rows) — never inline pipes on one line
+- Keep paragraphs short (2-3 sentences)
+If the context is insufficient, say so. Never invent facts.
 
 Context:
 
